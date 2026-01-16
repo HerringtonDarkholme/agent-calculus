@@ -2,13 +2,15 @@
 
 ## Abstract
 
-This document presents a unified formal framework for understanding AI agents through a calculus-like model. We introduce the concept of **entities** as the fundamental unit of agent computation, and define a **harness** that manages the flow of entities between the LLM's context and the external world. This framework elegantly unifies disparate concepts such as skills, tools, memory, subagents, and dynamic context loading under a single coherent model.
+Let me tell you about something rather exciting. We're going to develop a unified formal framework for understanding AI agents—a kind of calculus, if you will. At the heart of this framework is a beautifully simple idea: **entities** as the fundamental unit of agent computation. And we'll define a **harness** that manages how these entities flow between the LLM's context and the external world.
+
+What's particularly elegant about this, and what I think you'll find quite satisfying, is that this single framework unifies disparate concepts—skills, tools, memory, subagents, dynamic context loading—all under one coherent model. Rather nice, don't you think?
 
 ## 1. Introduction & Motivation
 
 ### The Problem
 
-Modern AI agent systems involve numerous distinct concepts:
+Now, let's start by asking ourselves: what's going on in modern AI agent systems? Well, if you look carefully, you'll find we're juggling quite a few distinct concepts:
 - **Tools**: Functions the agent can call to interact with the world
 - **Skills**: Reusable prompt templates and workflows
 - **Memory**: Persistent state from previous interactions
@@ -16,68 +18,80 @@ Modern AI agent systems involve numerous distinct concepts:
 - **Dynamic context loading**: Just-in-time injection of relevant information
 - **System prompts**: Static instructions and behavior definitions
 
-These concepts are typically treated as separate mechanisms, leading to:
-- Conceptual fragmentation in agent design
+And here's the thing that should make us a bit uncomfortable: these concepts are typically treated as completely separate mechanisms. It's a bit of a mess, frankly. What does this lead to?
+- Conceptual fragmentation in agent design—we can't see the forest for the trees
 - Difficulty reasoning about agent behavior holistically
 - Lack of composability between different agent patterns
 
+This is what I call the "bag of tricks" approach. It works, but it's not particularly satisfying intellectually, is it?
+
 ### The Solution
 
-We propose treating all inputs to an agent as **entities** that flow through a **harness** which manages:
+So what can we do about this? Well, here's the key insight: what if we treated *all* inputs to an agent as **entities** that flow through a **harness**? Let me be clear about what the harness does:
 1. **Loading**: Filtering and packing entities into the LLM's limited context
 2. **Execution**: Handling LLM actions and returning new entities
 
-This abstraction enables:
-- Unified reasoning about agent behavior
-- Compositional design patterns
+Now, why is this a good idea? What does this abstraction give us?
+- Unified reasoning about agent behavior—one model, not six
+- Compositional design patterns—things snap together nicely
 - Systematic approaches to context management
 - Formal analysis of multi-agent systems
 
+The beauty here is that we've found the right level of abstraction. Not too high, not too low. Just right.
+
 ## 2. Core Assumptions
 
-To simplify our calculus, we make three foundational assumptions:
+Now, before we dive into the technical details, let's be absolutely clear about our assumptions. I'm a great believer in making assumptions explicit—it prevents all sorts of confusion later on. We're going to make three foundational assumptions to simplify our calculus:
 
 **Assumption 1: Limited Context**
-> LLM context windows are finite and constrained. Context is the primary scarce resource in agent systems.
 
-Note: LLM's context window can be larger in future. For example,
-* a conditional memory lookup can spare more attention to longer context https://github.com/deepseek-ai/Engram?tab=readme-ov-file
-* Extending the Context of Pretrained LLMs by Dropping their Positional Embeddings (DroPE) https://pub.sakana.ai/DroPE/
+Here's the first assumption, and it's crucial: *LLM context windows are finite and constrained*. Context is the primary scarce resource in agent systems.
+
+Think about it this way: you've got perhaps 128K tokens to work with. That's it. Everything has to fit in there. This is the bottleneck, the constraint that drives everything else in our design.
+
+Now, you might say, "But Simon, won't context windows get larger in the future?" And you'd be absolutely right! There's fascinating work happening—conditional memory lookup systems like Engram (https://github.com/deepseek-ai/Engram?tab=readme-ov-file), and techniques like DroPE that extend context by dropping positional embeddings (https://pub.sakana.ai/DroPE/). But even so, the fundamental constraint remains: context is finite. The limit may move, but there will always *be* a limit.
 
 **Assumption 2: Static Capabilities**
-> LLMs do not perform continual learning during inference. Their capabilities are fixed at deployment.
 
-Note: this can be changed in future. So some routine context loading can be done by updating model weights
-* see Nested Learning: The Illusion of Deep Learning Architecture. https://abehrouz.github.io/files/NL.pdf
+Second assumption: *LLMs do not perform continual learning during inference*. Their capabilities are fixed at deployment.
+
+What do I mean by that? Well, when you're running an agent, the LLM isn't learning new skills on the fly. It's not updating its weights. It's a fixed function—you give it input, you get output, but the function itself doesn't change.
+
+Of course, this might change in the future. There's intriguing research on nested learning (see https://abehrouz.github.io/files/NL.pdf) that could allow routine context loading to be absorbed into model weights. But for now, we'll assume static capabilities. It makes our model much cleaner.
 
 **Assumption 3: LLM Homogeneity**
-> For the purposes of this calculus, we treat different LLMs as interchangeable.
 
-Note: In practice they differ, but this simplifies our model.
+Third assumption: *For the purposes of this calculus, we treat different LLMs as interchangeable*.
+
+Now, I can hear you protesting: "But Simon, GPT-4 is different from Claude is different from Llama!" Yes, yes, in practice they differ. But for our formal model, we're going to abstract over those differences. This isn't about being sloppy—it's about finding the right level of abstraction to make progress on the core ideas.
 
 ## 3. Fundamental Definitions
 
 ### 3.1 LLM as Pure Function
 
-We model an LLM as a pure function:
+Right, let's get formal. How should we model an LLM? Here's my proposal: let's think of it as a *pure function*. What do I mean by that?
 
 ```
 LLM: Context → (Reasoning, Actions)
 ```
 
-**Inputs:**
+Look at this signature carefully. The LLM takes one thing as input and produces two things as output:
+
+**Input:**
 - `Context`: The text and structured data directly accessible to the LLM
 
 **Outputs:**
 - `Reasoning`: Internal thought process, chain-of-thought, analysis
 - `Actions`: Structured requests to interact with the world (tool calls, responses, queries)
 
-The LLM has no direct access to anything outside its context. It cannot see files, networks, databases, or any other state unless that information is explicitly loaded into its context.
+Now here's the crucial bit: *The LLM has no direct access to anything outside its context*. It cannot see files, networks, databases, or any other state unless that information is explicitly loaded into its context. Think of it as being in a sealed room—the only thing it can see is what's written on the walls of that room (the context).
 
 ### 3.2 Context vs World
 
+This distinction is absolutely fundamental, so let me be very precise about it:
+
 **Context**: The observable, directly accessible information within the LLM's attention window.
-- Limited in size (e.g., 128K tokens)
+- Limited in size (e.g., 128K tokens)—remember Assumption 1!
 - Directly influences LLM outputs
 - Managed by the harness
 
@@ -88,32 +102,44 @@ The LLM has no direct access to anything outside its context. It cannot see file
 - Previous conversation history (not currently in context)
 - External knowledge bases
 
-The harness acts as the bridge between Context and World.
+You see the picture? The LLM lives in the context, isolated from the world. The harness acts as the bridge between these two realms. It's rather like the distinction between memory and disk in operating systems—one is fast and limited, the other is vast but inaccessible without mediation.
 
 ### 3.3 Agent Decomposition
 
-An agent is the composition of two components:
+Now we come to one of the most important equations in this whole framework. Are you ready? Here it is:
 
 ```
 Agent = LLM + Harness
 ```
 
-The **LLM** performs reasoning and generates actions.
+That's it! An agent is just the composition of two components. Let me be clear about their respective responsibilities:
+
+The **LLM** performs reasoning and generates actions. It's the brain, if you like.
 
 The **Harness** manages the agent loop:
 - Loads entities into context
 - Executes actions in the world
 - Handles context window constraints
 
+This separation of concerns is tremendously powerful. The LLM doesn't worry about context management—that's the harness's job. And the harness doesn't do reasoning—that's the LLM's job. Clean separation, clean interfaces.
+
 ## 4. The Entity Abstraction
 
-**Core Insight**: Everything that can be loaded into an LLM's context is an **entity**.
+Now we come to the real heart of the matter. Are you ready for the core insight? Here it is:
+
+**Everything that can be loaded into an LLM's context is an entity.**
+
+Let me say that again, because it's so important: *everything*. Tools? Entities. Skills? Entities. Memory? Entities. User input? Entity. Tool results? Entities. All entities! This is the abstraction that unifies the whole framework.
 
 ### 4.1 Entity Definition
+
+So what is an entity, precisely? It's wonderfully simple:
 
 An entity is a unit of information with:
 - **Content**: The actual data or text
 - **Metadata**: How it should be loaded, when it's relevant, its size
+
+That's it! Content and metadata. The content is what goes into the context, and the metadata tells the harness how to manage it.
 
 ### 4.2 Entity Types by Loading Strategy
 
@@ -128,7 +154,7 @@ An entity is a unit of information with:
 
 ### 4.3 Entity Dimensions
 
-Entities can be characterized along multiple dimensions:
+Now, entities aren't all the same, are they? We can characterize them along multiple dimensions. Think of this as a design space:
 
 **1. Content Mutability**
 - **Static**: Content doesn't change (tool definitions, skills)
@@ -138,11 +164,13 @@ Entities can be characterized along multiple dimensions:
 - **Preloaded**: Always in context (system prompt, current memory)
 - **Dynamic**: Loaded on-demand (skills when invoked, tool descriptions when relevant)
 
-**3. Verbosity Levels**
+**3. Verbosity Levels**—this is particularly clever:
 - **Full**: Complete content loaded
 - **Summary**: Condensed version (e.g., skill titles only)
 - **Digest**: Compressed representation (e.g., large tool results summarized)
 - **Reference**: Pointer only (content remains in world, accessed via actions)
+
+You see what we're doing here? We're giving ourselves a knob to turn—we can control how much of each entity we load into the precious, limited context. This is how we'll manage the context window constraint!
 
 ### 4.4 Examples
 
@@ -207,15 +235,19 @@ Entity: GitCommitSkill
 
 ## 5. The Harness
 
-The harness is the orchestration layer that manages the agent loop. It has two core responsibilities:
+Right, let's talk about the harness. This is the orchestration layer that manages the agent loop. It has two core responsibilities, and I want to be very precise about them.
 
 ### 5.1 Load Function
+
+Here's the first function, and it's a beauty:
 
 ```
 load: (Context, Entity, List[Entity]) → Context'
 ```
 
 **Purpose**: Intelligently pack entities into the limited context window.
+
+Now let's break this down. What are the inputs and outputs?
 
 **Inputs:**
 - `Context`: Current context state
@@ -225,13 +257,18 @@ load: (Context, Entity, List[Entity]) → Context'
 **Output:**
 - `Context'`: Updated context ready for LLM consumption
 
-**Responsibilities:**
-1. **Filtering**: Select only relevant entities from available pool
-2. **Compression**: Choose appropriate verbosity level for each entity
-3. **Ordering**: Arrange entities for optimal LLM performance
-4. **Eviction**: Remove or compress old entities if context is full
+But here's the thing—this isn't just blindly stuffing things into context! The load function has some serious responsibilities:
+
+1. **Filtering**: Select only relevant entities from available pool. Don't load file tools if we're doing math!
+2. **Compression**: Choose appropriate verbosity level for each entity. Full detail where needed, summaries elsewhere.
+3. **Ordering**: Arrange entities for optimal LLM performance. This matters more than you might think!
+4. **Eviction**: Remove or compress old entities if context is full. Something's got to go.
+
+This is where all the cleverness happens. The load function is like a skilled editor, deciding what goes in, what stays out, and how much detail to include.
 
 ### 5.2 Execute Function
+
+Now for the second function:
 
 ```
 execute: (Action, World) → (Entity, World')
@@ -239,18 +276,22 @@ execute: (Action, World) → (Entity, World')
 
 **Purpose**: Perform actions in the world and return results as entities.
 
+What's happening here? The LLM generates an action, and the harness makes it happen in the real world.
+
 **Inputs:**
 - `Action`: LLM-generated action (tool call, query, response)
 - `World`: Current world state
 
 **Outputs:**
-- `Entity`: Result data packaged as an entity
+- `Entity`: Result data packaged as an entity—notice this! The result comes back as an entity.
 - `World'`: Updated world state after action
 
-**Examples:**
+Let me give you some concrete examples:
 - `Action = read_file("config.json")` → `Entity = {type: "tool_result", content: "{...json...}"}`
 - `Action = spawn_subagent("research task")` → `Entity = {type: "subagent_result", content: "..."}`
 - `Action = respond("Done!")` → `Entity = {type: "agent_response", content: "Done!"}`
+
+You see the pattern? Action goes out, entity comes back. The world might change (that's `World'`), and we get new information as an entity ready to be loaded into context on the next turn.
 
 ### 5.3 Context Window Management
 
@@ -308,9 +349,11 @@ The `load` function is composed of atomic operations:
 
 ## 6. The Agent Loop
 
-Now we can express the complete agent execution as a simple loop:
+Right, this is where it all comes together! Now we can express the complete agent execution as a beautifully simple loop. This is the payoff for all our careful design.
 
 ### 6.1 Pseudocode
+
+Look at this carefully:
 
 ```python
 def agent_loop(user_input, world):
@@ -338,6 +381,8 @@ def agent_loop(user_input, world):
 
     return ctx, world
 ```
+
+Do you see how clean this is? Three phases: Load, Reason, Execute. Then repeat! The entity flows around the loop—load it into context, LLM reasons and acts, execute the action to get a new entity. Round and round we go until the task is complete.
 
 ### 6.2 Example Execution Trace
 
@@ -393,13 +438,14 @@ Execute Phase:
 
 ## 7. Multi-Agent Design Patterns
 
-Using the entity calculus, we can formally describe common agent patterns.
+Now here's where things get really interesting! Using our entity calculus, we can formally describe all the common agent patterns you've heard about. And what's beautiful is that they all emerge naturally from our framework. Let me show you.
 
 ### 7.1 Pattern: Tool-Use Agent
 
 **Description**: Agent with access to external tools.
 
-**Implementation**:
+How do we implement this? It's almost trivial:
+
 ```python
 entities = [
     Entity(system_prompt),
@@ -413,13 +459,14 @@ entities = [
 # 2. Execution handler (for harness.execute)
 ```
 
-**Key Insight**: Tools are simultaneously entities (their descriptions load into context) and actions (their implementations execute in world).
+**Key Insight**: Tools are simultaneously entities (their descriptions load into context) and actions (their implementations execute in world). They live in both realms! The description is an entity that the LLM can see, and the implementation is a function that execute() calls. Rather elegant, no?
 
 ### 7.2 Pattern: Skill-Enhanced Agent
 
 **Description**: Agent that can load predefined workflows on-demand.
 
-**Implementation**:
+Here's the clever bit:
+
 ```python
 # Skills available but not preloaded
 skill_entities = [
@@ -435,7 +482,7 @@ else:
     load(GitCommitSkill, verbosity=summary)  # just title
 ```
 
-**Key Insight**: Skills are entities loaded at different verbosity levels based on relevance.
+**Key Insight**: Skills are just entities loaded at different verbosity levels based on relevance! When the user mentions "git commit", we load the full GitCommitSkill entity. Otherwise, we might just show the title. Same mechanism, different verbosity.
 
 ### 7.3 Pattern: Subagent Spawning
 
@@ -490,7 +537,8 @@ Parent Agent:
 
 **Description**: Agent retrieves relevant documents before generating responses.
 
-**Implementation**:
+Now, you might have thought RAG was something special, something different. But watch this:
+
 ```python
 # RAG is just a special load strategy
 def rag_load(ctx, entity, entities):
@@ -507,13 +555,14 @@ def rag_load(ctx, entity, entities):
     return load(ctx, entity, entities + doc_entities)
 ```
 
-**Key Insight**: RAG is just a sophisticated entity discovery mechanism. Retrieved documents are entities loaded into context.
+**Key Insight**: RAG is just a sophisticated entity discovery mechanism! That's all it is. Retrieved documents are entities loaded into context. There's nothing magical here—it's the same load/execute loop, just with a clever way of discovering which entities to load. Semantic search finds the entities, and we load them. Done!
 
 ### 7.5 Pattern: ReAct (Reasoning + Acting)
 
 **Description**: Agent alternates between reasoning and tool use.
 
-**Implementation**:
+Now this is really beautiful. Watch what happens:
+
 ```python
 # ReAct is the default agent loop!
 # The loop naturally alternates:
@@ -531,7 +580,7 @@ Turn 3:
   Action: respond("Done!")
 ```
 
-**Key Insight**: ReAct emerges naturally from the agent loop structure. No special implementation needed.
+**Key Insight**: ReAct emerges naturally from the agent loop structure! We didn't have to do anything special—it just falls out of our design. The LLM always produces reasoning and actions together (remember our function signature?), and the loop naturally alternates between thinking and acting. This is what I mean when I say we've found the right abstraction—common patterns emerge for free.
 
 ### 7.6 Pattern: Reflection
 
@@ -600,11 +649,13 @@ def parallel_agents(task, world):
 
 ## 8. Advanced Topics
 
+Right, now let's dig into some more advanced ideas. These are techniques and optimizations that emerge once you start implementing this framework seriously.
+
 ### 8.1 Dynamic Tool Loading
 
-**Problem**: Loading descriptions of 100+ tools wastes context on irrelevant tools.
+Here's a problem you'll run into immediately: if you have 100+ tools, loading all their descriptions wastes precious context on irrelevant tools. So what do we do?
 
-**Solution**: Treat tool discovery as a two-phase load.
+**Solution**: Treat tool discovery as a two-phase load. Here's the clever bit:
 
 **Implementation**:
 ```python
@@ -855,9 +906,11 @@ reasoning, action = llm(ctx)
 
 ## 10. Future Directions & Open Questions
 
+Now, let's talk about the future. There are some really interesting open questions here—research opportunities, if you will. I'll outline a few that I think are particularly intriguing.
+
 ### 10.1 Entity Discovery as a Graph
 
-**Idea**: Entities can link to related entities, forming a graph.
+**Idea**: What if entities could link to related entities, forming a graph?
 
 ```python
 Entity(GitCommitSkill).links = [
@@ -868,9 +921,9 @@ Entity(GitCommitSkill).links = [
 ]
 ```
 
-**Use Case**: When GitCommitSkill is loaded, harness can automatically load linked tools.
+**Use Case**: When GitCommitSkill is loaded, the harness could automatically load linked tools. Rather nice for dependency management!
 
-**Question**: How to prevent exponential blow-up of linked entities?
+**Question**: But here's the rub—how do we prevent exponential blow-up of linked entities? If A links to B and C, and B links to D and E, and so on... you can see the problem. This needs careful thought.
 
 ### 10.2 Entity-Provided Processing Instructions
 
@@ -890,7 +943,7 @@ Entity(tool_result).processing_hints = {
 
 ### 10.3 Learned Context Management
 
-**Idea**: Use ML to learn optimal loading strategies.
+**Idea**: Why hand-code the load function? What if we used ML to learn optimal loading strategies?
 
 ```python
 # Train a model to predict:
@@ -905,7 +958,9 @@ load_policy = train(
 )
 ```
 
-**Question**: How to collect training data? What are the right features?
+This is quite appealing, isn't it? Let the system learn from experience what works best.
+
+**Questions**: But there are challenges. How do we collect training data? What are the right features to use? And how do we ensure the learned policy generalizes to new tasks? These are open research questions—worthy problems for a PhD student, I'd say!
 
 ### 10.4 Hierarchical Entities
 
@@ -1045,44 +1100,50 @@ MetaEntity(
 
 ## 11. Conclusion
 
-The **Entity Calculus** provides a unified lens for understanding AI agents:
+So, let me wrap this up and tell you what we've accomplished. The **Entity Calculus** provides a unified lens for understanding AI agents. Let me count the ways:
 
-1. **Everything is an entity**: Skills, tools, memory, data—all flow through the same abstraction.
+1. **Everything is an entity**: Skills, tools, memory, data—all flow through the same abstraction. One concept to rule them all!
 
-2. **Harness manages entity flow**: The `load` and `execute` functions orchestrate entity movement between context and world.
+2. **Harness manages entity flow**: The `load` and `execute` functions orchestrate entity movement between context and world. Two functions, that's it.
 
-3. **Context is the bottleneck**: All optimizations revolve around the limited context window.
+3. **Context is the bottleneck**: All optimizations revolve around the limited context window. Everything else is easy by comparison.
 
-4. **Patterns emerge naturally**: Common agent patterns (ReAct, RAG, multi-agent) are special cases of entity flow.
+4. **Patterns emerge naturally**: Common agent patterns (ReAct, RAG, multi-agent) are special cases of entity flow. We didn't design them in—they fell out!
 
-5. **Composability**: Because everything is an entity, components compose cleanly.
+5. **Composability**: Because everything is an entity, components compose cleanly. This is what good abstraction gives you.
 
 ### Key Insights
 
-- **Agent = LLM + Harness** cleanly separates reasoning (LLM) from orchestration (harness).
-- **Entity abstraction** unifies disparate concepts under one model.
-- **Load/Execute duality** captures the full agent loop: load entities into context, execute actions in world.
-- **Multi-agent systems** are recursive applications of the same calculus.
+Let me highlight the really important bits:
+
+- **Agent = LLM + Harness** cleanly separates reasoning (LLM) from orchestration (harness). This separation is crucial.
+- **Entity abstraction** unifies disparate concepts under one model. Tools, skills, memory—all entities.
+- **Load/Execute duality** captures the full agent loop: load entities into context, execute actions in world. That's the whole game.
+- **Multi-agent systems** are recursive applications of the same calculus. Agents all the way down!
 
 ### Practical Value
 
+Now, why should you care? What's this good for?
+
 For **researchers**, this framework provides:
-- Formal vocabulary for discussing agent architectures
-- Basis for systematic analysis of agent behaviors
-- Foundation for developing new context management techniques
+- Formal vocabulary for discussing agent architectures—we can talk precisely now
+- Basis for systematic analysis of agent behaviors—no more hand-waving
+- Foundation for developing new context management techniques—lots of room for innovation
 
 For **engineers**, this framework provides:
-- Clear mental model for designing agents
-- Reusable patterns for common agent tasks
-- Principled approach to context optimization
+- Clear mental model for designing agents—you know what you're building
+- Reusable patterns for common agent tasks—don't reinvent the wheel
+- Principled approach to context optimization—engineer it properly
 
 ### Next Steps
 
-We invite the community to:
-1. Implement reference harnesses following this calculus
-2. Develop benchmarks for entity loading strategies
-3. Explore the open questions outlined in Section 10
-4. Extend the calculus to new domains (e.g., multimodal agents, embodied agents)
+So what should we do with this? I invite the community to:
+1. Implement reference harnesses following this calculus—show us what you can build!
+2. Develop benchmarks for entity loading strategies—measure what matters
+3. Explore the open questions outlined in Section 10—there's lots to discover
+4. Extend the calculus to new domains (e.g., multimodal agents, embodied agents)—push the boundaries
+
+This is just the beginning. The framework gives us a foundation, but there's so much more to explore. I'm rather excited to see where this goes!
 
 ---
 
