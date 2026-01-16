@@ -13,6 +13,8 @@ What's particularly elegant about this, and what I think you'll find quite satis
 Now, let's start by asking ourselves: what's going on in modern AI agent systems? Well, if you look carefully, you'll find we're juggling quite a few distinct concepts:
 - **Tools**: Functions the agent can call to interact with the world
 - **Skills**: Reusable prompt templates and workflows
+- **Rules**: Configuration files (agent.md) defining behavioral constraints and guidelines
+- **Slash Commands**: User-invocable shortcuts that trigger specialized workflows
 - **Memory**: Persistent state from previous interactions
 - **Subagents**: Spawned agents for subtasks
 - **Dynamic context loading**: Just-in-time injection of relevant information
@@ -484,7 +486,244 @@ else:
 
 **Key Insight**: Skills are just entities loaded at different verbosity levels based on relevance! When the user mentions "git commit", we load the full GitCommitSkill entity. Otherwise, we might just show the title. Same mechanism, different verbosity.
 
-### 7.3 Pattern: Subagent Spawning
+### 7.3 Pattern: Rule-Based Agent (agent.md)
+
+**Description**: Agent that follows persistent rules and guidelines defined in configuration files.
+
+Now here's something rather interesting. Many agent systems use configuration files—often called `agent.md` or similar—to define rules, constraints, and behavioral guidelines. How do these fit into our framework? Well, they're just entities! But with a special twist.
+
+**Implementation**:
+```python
+# Rule file as static, preloaded entity
+agent_rules = Entity(
+    type="rules",
+    content=read_file("agent.md"),  # Could include:
+                                     # - Behavioral guidelines
+                                     # - Domain constraints
+                                     # - Output formatting rules
+                                     # - Safety restrictions
+                                     # - Style preferences
+    loading="preloaded",             # Always in context
+    verbosity="full",                # Never compress
+    priority="high"                  # Loaded early in context
+)
+
+# Rules are preloaded in every agent loop iteration
+entities = [
+    Entity(system_prompt),
+    agent_rules,  # <- Always present
+    Entity(memory),
+    Entity(user_input),
+    *tool_entities
+]
+```
+
+**Example Rule File (agent.md)**:
+```markdown
+# Agent Rules
+
+## Code Style
+- Always use TypeScript for new files
+- Prefer functional components in React
+- Use 2-space indentation
+
+## Behavioral Guidelines
+- Ask for clarification before major refactors
+- Run tests after code changes
+- Never commit directly to main branch
+
+## Safety Constraints
+- Never execute shell commands without user approval
+- Validate all user inputs
+- Don't expose sensitive credentials in logs
+```
+
+**Key Insight**: Rules are **static, high-priority entities that are always preloaded**. They shape agent behavior by being permanently present in the context. Think of them as the "constitution" of the agent—fundamental principles that govern all actions.
+
+**Comparison to System Prompt**:
+- **System Prompt**: Defines the agent's role and core capabilities (who the agent is)
+- **Rules Entity**: Defines constraints, guidelines, and preferences (how the agent should behave)
+
+The distinction is subtle but important. The system prompt says "You are a helpful coding assistant." The rules entity says "When you write code, always include error handling and tests."
+
+### 7.4 Pattern: Slash Commands
+
+**Description**: User-invocable shortcuts that expand into full prompts or trigger specialized workflows.
+
+You know, I find slash commands particularly elegant—they're a beautiful example of progressive disclosure in UI design applied to AI agents. Let me show you what I mean.
+
+**Implementation**:
+```python
+# Slash commands as dynamic skill entities
+slash_commands = {
+    "/commit": Entity(
+        type="skill",
+        content="""
+        # Git Commit Workflow
+        1. Run git status to see all changes
+        2. Run git diff to review modifications
+        3. Analyze changes and draft commit message following repo style
+        4. Ask user for approval if changes are significant
+        5. Execute git add and git commit
+        6. Run git log to verify
+        """,
+        loading="dynamic",  # Loaded only when user types "/commit"
+        trigger="user_command"
+    ),
+
+    "/review-pr": Entity(
+        type="skill",
+        content="""
+        # Pull Request Review Workflow
+        1. Fetch PR details using GitHub API or gh CLI
+        2. Analyze code changes for:
+           - Logic errors and bugs
+           - Security vulnerabilities
+           - Performance issues
+           - Style consistency
+        3. Check test coverage
+        4. Verify documentation updates
+        5. Provide structured feedback with severity levels
+        """,
+        loading="dynamic",
+        trigger="user_command"
+    ),
+
+    "/explain": Entity(
+        type="skill",
+        content="""
+        # Code Explanation Workflow
+        1. Read the target file or function
+        2. Analyze:
+           - Purpose and functionality
+           - Input/output behavior
+           - Dependencies and side effects
+           - Edge cases and error handling
+        3. Generate explanation using analogies and examples
+        4. Offer to explain specific parts in more detail
+        """,
+        loading="dynamic",
+        trigger="user_command"
+    ),
+}
+
+# When user types "/commit", expand the command
+def handle_user_input(user_input, entities):
+    if user_input.startswith("/"):
+        command = user_input.split()[0]
+        args = user_input[len(command):].strip()
+
+        if command in slash_commands:
+            # Load the skill entity associated with this command
+            skill = slash_commands[command]
+
+            # Create enhanced user input entity
+            enhanced_input = Entity(
+                type="user_input",
+                content=f"Execute this workflow: {skill.content}\nUser args: {args}",
+                metadata={"original_command": command}
+            )
+
+            return enhanced_input, [skill] + entities
+
+    return Entity(user_input), entities
+```
+
+**Example Usage Flow**:
+```
+User: "/commit"
+
+Agent Loop Turn 1:
+  Load Phase:
+    - Detect slash command "/commit"
+    - Load full GitCommitSkill entity
+    - Expand user input: "Execute git commit workflow"
+    ctx = [system_prompt, rules, GitCommitSkill, file_tools, git_tools, user_input]
+
+  LLM Phase:
+    reasoning: "Need to check current git status first"
+    action: git_status()
+
+  Execute Phase:
+    entity: {type: "tool_result", content: "modified: src/app.ts\nmodified: README.md"}
+
+Turn 2:
+  Load Phase:
+    ctx = [system_prompt, rules, GitCommitSkill, git_status_result, diff_tools]
+
+  LLM Phase:
+    reasoning: "Should review the actual changes"
+    action: git_diff()
+
+  ... workflow continues ...
+```
+
+**Key Insight**: Slash commands are **user-triggered skill entities**. They provide:
+1. **Discoverability**: Users can easily invoke complex workflows with simple commands
+2. **Consistency**: Same workflow logic every time
+3. **Efficiency**: No need to type long instructions repeatedly
+
+**Design Variations**:
+
+**Variation 1: Slash Command with Parameters**
+```python
+User: "/explain src/auth.ts --detail high"
+
+# Parse into:
+command = "/explain"
+args = {"file": "src/auth.ts", "detail": "high"}
+
+# Load skill with args injected into content
+skill.content = f"""
+Explain the code in {args['file']} with {args['detail']} level of detail.
+[... workflow steps ...]
+"""
+```
+
+**Variation 2: Slash Command as Tool**
+```python
+# Instead of expanding to skills, slash commands could be tools
+SlashCommandTool = Tool(
+    name="execute_slash_command",
+    description="Execute predefined workflows like /commit, /review-pr, /explain",
+    execute=lambda command, args, world: {
+        workflow = get_workflow(command)
+        result = execute_workflow(workflow, args, world)
+        return Entity(type="workflow_result", content=result), world
+    }
+)
+
+# LLM can invoke slash commands programmatically
+action = execute_slash_command("/commit")
+```
+
+**Variation 3: Hierarchical Slash Commands**
+```python
+slash_commands = {
+    "/git": {
+        "/git commit": GitCommitSkill,
+        "/git pr": PRCreationSkill,
+        "/git sync": GitSyncSkill,
+    },
+    "/test": {
+        "/test run": TestRunnerSkill,
+        "/test debug": TestDebuggerSkill,
+        "/test coverage": CoverageSkill,
+    }
+}
+```
+
+**Comparison to Skills**:
+| | Skills | Slash Commands |
+|---|--------|----------------|
+| **Trigger** | Semantic relevance | Explicit user invocation |
+| **Discovery** | Automatic (by harness) | Manual (user must know command) |
+| **Loading** | Dynamic based on context | Dynamic on command |
+| **Purpose** | Implicit workflow activation | Explicit workflow activation |
+
+Think of skills as "the agent discovers what to do" and slash commands as "the user tells the agent what to do." Both are entities, both are workflows, but the invocation mechanism differs.
+
+### 7.5 Pattern: Subagent Spawning
 
 **Description**: Agent delegates subtasks to other agents.
 
@@ -533,7 +772,7 @@ Parent Agent:
     action: write_file("react-hooks-summary.md", content=subagent_result)
 ```
 
-### 7.4 Pattern: RAG (Retrieval-Augmented Generation)
+### 7.6 Pattern: RAG (Retrieval-Augmented Generation)
 
 **Description**: Agent retrieves relevant documents before generating responses.
 
@@ -557,7 +796,7 @@ def rag_load(ctx, entity, entities):
 
 **Key Insight**: RAG is just a sophisticated entity discovery mechanism! That's all it is. Retrieved documents are entities loaded into context. There's nothing magical here—it's the same load/execute loop, just with a clever way of discovering which entities to load. Semantic search finds the entities, and we load them. Done!
 
-### 7.5 Pattern: ReAct (Reasoning + Acting)
+### 7.7 Pattern: ReAct (Reasoning + Acting)
 
 **Description**: Agent alternates between reasoning and tool use.
 
@@ -582,7 +821,7 @@ Turn 3:
 
 **Key Insight**: ReAct emerges naturally from the agent loop structure! We didn't have to do anything special—it just falls out of our design. The LLM always produces reasoning and actions together (remember our function signature?), and the loop naturally alternates between thinking and acting. This is what I mean when I say we've found the right abstraction—common patterns emerge for free.
 
-### 7.6 Pattern: Reflection
+### 7.8 Pattern: Reflection
 
 **Description**: Agent reviews and critiques its own work.
 
@@ -621,7 +860,7 @@ Agent:
 
 **Key Insight**: Reflection is subagent spawning with a specialized critic prompt.
 
-### 7.7 Pattern: Multi-Agent Collaboration
+### 7.9 Pattern: Multi-Agent Collaboration
 
 **Description**: Multiple agents work in parallel on different aspects of a task.
 

@@ -1,73 +1,102 @@
-# React + TypeScript + Vite
+# Agent Calculus Interactive Demo
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An interactive web application demonstrating the **Agent Calculus** framework - a unified formal framework for understanding AI agents.
 
-Currently, two official plugins are available:
+🚀 **Live Demo**: https://agent-calculus-demo-bb7kgx7sx-herringtondarkholmes-projects.vercel.app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Overview
 
-## React Compiler
+This interactive demo visualizes the core concepts of the Agent Calculus framework:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Agent = LLM + Harness**: The fundamental decomposition of an AI agent
+- **Entity Abstraction**: Everything (tools, skills, memory, user input) as entities that flow through the system
+- **The Agent Loop**: Load → Reason → Execute cycle
+- **Common Patterns**: Tool-use, Skills, RAG, ReAct, Subagents, and Reflection
 
-## Expanding the ESLint configuration
+## Features
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 📚 Introduction Tab
+- Visual explanation of core concepts
+- Entity type examples with different verbosity levels
+- Interactive agent loop diagram
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 🔄 Agent Loop Tab
+- Step-by-step simulation of an agent solving a task
+- Real-time context window visualization
+- Execution log showing Load/Reason/Execute phases
+- Animated phase transitions
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### 🎯 Patterns Tab
+- Overview of 6 common agent patterns
+- Shows how all patterns emerge naturally from the entity calculus
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Tech Stack
+
+- **React** + **TypeScript** for type-safe component development
+- **Vite** for fast development and optimized production builds
+- **CSS3** with custom properties for theming and animations
+- **Vercel** for hosting and deployment
+
+## Local Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Project Structure
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+src/
+├── App.tsx          # Main application component
+├── App.css          # Styling and animations
+├── index.css        # Global styles
+└── main.tsx         # Application entry point
+```
+
+## Deployment
+
+This project is configured for automatic deployment to Vercel:
+
+```bash
+# Deploy to production
+vercel --prod
+```
+
+## Key Components
+
+### Entity Types
+- `system_prompt` - Agent instructions
+- `user_input` - User requests
+- `tool_description` - Available tools
+- `tool_result` - Tool execution results
+- `memory` - Conversation history
+
+### Verbosity Levels
+- `full` - Complete content
+- `summary` - Condensed version
+- `digest` - Compressed representation
+- `reference` - Pointer only
+
+## Learn More
+
+- Read the [Agent Calculus paper](../agent-calculus.md)
+- Explore the framework concepts in the live demo
+- Built with inspiration from Simon Peyton Jones' teaching style
+
+## License
+
+MIT
+
+---
+
+Built with the Agent Calculus framework • A unified approach to AI agent design
