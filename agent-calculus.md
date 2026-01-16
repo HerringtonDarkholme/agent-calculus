@@ -29,17 +29,36 @@ This is what I call the "bag of tricks" approach. It works, but it's not particu
 
 ### The Solution
 
-So what can we do about this? Well, here's the key insight: what if we treated *all* inputs to an agent as **entities** that flow through a **harness**? Let me be clear about what the harness does:
-1. **Loading**: Filtering and packing entities into the LLM's limited context
-2. **Execution**: Handling LLM actions and returning new entities
+So what can we do about this? Well, here's the key insight: what if we had a unified way to think about all these disparate concepts? Let me introduce three fundamental building blocks:
+
+**LLM (Large Language Model)**
+- A pure function that takes context as input and produces reasoning and actions as output
+- It's the "brain" but critically, it has no direct access to the world
+- Cannot see files, networks, databases, or any state unless explicitly loaded into its context
+
+**Harness**
+- The orchestration layer that manages what goes into the LLM's context and executes the actions it requests
+- Think of it as the "body" that bridges the LLM to the world
+- Two primary responsibilities:
+  1. **Loading**: Filtering and packing entities into the LLM's limited context
+  2. **Execution**: Handling LLM actions and returning new entities
+
+**Entities**
+- A unified abstraction for *everything*: tools, skills, memory, user input, results
+- They all become entities that flow between the harness and the LLM
+- This is the key insight—treating all inputs uniformly
+
+```
+Agent = LLM + Harness
+```
+
+That's it! An agent is just the composition of these two components with entities flowing between them. The beauty here is that we've found the right level of abstraction. Not too high, not too low. Just right.
 
 Now, why is this a good idea? What does this abstraction give us?
 - Unified reasoning about agent behavior—one model, not six
 - Compositional design patterns—things snap together nicely
 - Systematic approaches to context management
 - Formal analysis of multi-agent systems
-
-The beauty here is that we've found the right level of abstraction. Not too high, not too low. Just right.
 
 ## 2. Core Assumptions
 
@@ -51,7 +70,7 @@ Here's the first assumption, and it's crucial: *LLM context windows are finite a
 
 Think about it this way: you've got perhaps 128K tokens to work with. That's it. Everything has to fit in there. This is the bottleneck, the constraint that drives everything else in our design.
 
-Now, you might say, "But Simon, won't context windows get larger in the future?" And you'd be absolutely right! There's fascinating work happening—conditional memory lookup systems like Engram (https://github.com/deepseek-ai/Engram?tab=readme-ov-file), and techniques like DroPE that extend context by dropping positional embeddings (https://pub.sakana.ai/DroPE/). But even so, the fundamental constraint remains: context is finite. The limit may move, but there will always *be* a limit.
+Now, you might say, "But hey, won't context windows get larger in the future?" And you'd be absolutely right! There's fascinating work happening—conditional memory lookup systems like Engram (https://github.com/deepseek-ai/Engram?tab=readme-ov-file), and techniques like DroPE that extend context by dropping positional embeddings (https://pub.sakana.ai/DroPE/). But even so, the fundamental constraint remains: context is finite. The limit may move, but there will always *be* a limit.
 
 **Assumption 2: Static Capabilities**
 
@@ -65,7 +84,7 @@ Of course, this might change in the future. There's intriguing research on neste
 
 Third assumption: *For the purposes of this calculus, we treat different LLMs as interchangeable*.
 
-Now, I can hear you protesting: "But Simon, GPT-4 is different from Claude is different from Llama!" Yes, yes, in practice they differ. But for our formal model, we're going to abstract over those differences. This isn't about being sloppy—it's about finding the right level of abstraction to make progress on the core ideas.
+Now, I can hear you protesting: "But  hey, GPT-4 is different from Claude is different from Llama!" Yes, yes, in practice they differ. But for our formal model, we're going to abstract over those differences. This isn't about being sloppy—it's about finding the right level of abstraction to make progress on the core ideas.
 
 ## 3. Fundamental Definitions
 

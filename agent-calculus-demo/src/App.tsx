@@ -16,7 +16,7 @@ function App() {
   const [stepDescription, setStepDescription] = useState('')
   const sectionsRef = useRef<HTMLElement[]>([])
 
-  const totalSections = 10
+  const totalSections = 15
 
   useEffect(() => {
     const handleScroll = () => {
@@ -43,73 +43,75 @@ function App() {
     }
   }
 
+  const contextCapacity = 8
+
   const getButtonText = () => {
     if (loopStep === 0) return 'RUN DEMO'
-    if (loopStep === 6) return 'RERUN'
+    if (loopStep === 5) return 'RERUN'
     return 'NEXT STEP'
+  }
+
+  const getCapacityPercentage = () => {
+    return Math.round((contextEntities.length / contextCapacity) * 100)
   }
 
   const nextStep = () => {
     const baseEntities: Entity[] = [
       { id: '1', type: 'system_prompt', content: 'You are a helpful AI assistant...', verbosity: 'full' },
-      { id: '2', type: 'user_input', content: 'Read config.json and fix the database port', verbosity: 'full' },
-      { id: '3', type: 'memory', content: 'User is working on database configuration...', verbosity: 'digest' },
+      { id: '2', type: 'user_input', content: 'Read config.json and update database port', verbosity: 'full' },
+      { id: '3', type: 'tools', content: 'Available: read_file, write_file, http_request', verbosity: 'full' },
     ]
 
     switch (loopStep) {
-      case 0: // Start demo - Step 1: Load
+      case 0: // Step 1: Initial Load
         setLoopStep(1)
         setContextEntities(baseEntities)
-        setStepDescription('Harness loads system prompt, user request, and relevant memory into context')
+        setStepDescription('Fresh start. Plenty of context space.')
         break
 
-      case 1: // Step 2: Reason
+      case 1: // Step 2: Reason & Act
         setLoopStep(2)
         setContextEntities([
           ...baseEntities,
-          { id: '4', type: 'reasoning', content: 'I need to read config.json to check the database port...', verbosity: 'full' },
+          { id: '4', type: 'reasoning', content: 'I need to read config.json to check the current port...', verbosity: 'full' },
           { id: '5', type: 'tool_call', content: 'read_file("config.json")', verbosity: 'full' }
         ])
-        setStepDescription('LLM produces reasoning and requests tool call to read config.json')
+        setStepDescription('LLM produces reasoning and action. Context filling up.')
         break
 
-      case 2: // Step 3: Execute
+      case 2: // Step 3: Execute & Add Result
         setLoopStep(3)
         setContextEntities([
           ...baseEntities,
-          { id: '4', type: 'reasoning', content: 'I need to read config.json to check the database port...', verbosity: 'full' },
-          { id: '6', type: 'tool_result', content: '{ "db_port": 3306, "db_host": "localhost" }', verbosity: 'full' }
+          { id: '4', type: 'reasoning', content: 'I need to read config.json to check the current port...', verbosity: 'full' },
+          { id: '6', type: 'tool_result', content: '{ "db_port": 3306, "app_name": "MyApp", "timeout": 30... }', verbosity: 'full' }
         ])
-        setStepDescription('Harness executes tool call and replaces it with the result')
+        setStepDescription('Action executed. Tool result now in context.')
         break
 
-      case 3: // Step 4: Load again
+      case 3: // Step 4: Context Pressure
         setLoopStep(4)
         setContextEntities([
           ...baseEntities,
-          { id: '4', type: 'reasoning', content: 'I need to read config.json to check the database port...', verbosity: 'full' },
-          { id: '6', type: 'tool_result', content: '{ "db_port": 3306, "db_host": "localhost" }', verbosity: 'full' }
+          { id: '4', type: 'reasoning', content: '...read config...', verbosity: 'summary' },
+          { id: '6', type: 'tool_result', content: '{ "db_port": 3306 }', verbosity: 'summary' },
+          { id: '7', type: 'reasoning', content: "Now I'll update the port to 5432 in the config", verbosity: 'full' },
+          { id: '8', type: 'tool_call', content: 'write_file("config.json", {db_port: 5432...})', verbosity: 'full' }
         ])
-        setStepDescription('Loop continues with updated context including tool result')
+        setStepDescription('Context pressure! Load function compressed old reasoning and tool_result.')
         break
 
-      case 4: // Step 5: Reason again
+      case 4: // Step 5: Completion
         setLoopStep(5)
         setContextEntities([
           ...baseEntities,
-          { id: '4', type: 'reasoning', content: 'I need to read config.json to check the database port...', verbosity: 'full' },
-          { id: '6', type: 'tool_result', content: '{ "db_port": 3306, "db_host": "localhost" }', verbosity: 'full' },
-          { id: '7', type: 'reasoning', content: 'Port is 3306 which is correct. Task complete.', verbosity: 'full' }
+          { id: '7', type: 'reasoning', content: "Now I'll update...", verbosity: 'summary' },
+          { id: '9', type: 'tool_result', content: 'Successfully updated config.json', verbosity: 'full' }
         ])
-        setStepDescription('LLM processes the tool result and determines the task is complete')
+        setStepDescription('Task complete. Load function evicted old tool interactions to free space.')
         break
 
-      case 5: // Step 6: Complete
-        setLoopStep(6)
-        setStepDescription('Task completed! The agent verified the database port configuration.')
-        break
-
-      case 6: // Restart
+      case 5: // Restart
         setLoopStep(0)
         setContextEntities([])
         setStepDescription('')
@@ -193,15 +195,34 @@ function App() {
         <div className="section-content">
           <h2 className="section-title">The Solution</h2>
           <p className="lecture-text">
-            So what can we do about this? Well, here's the key insight: what if we treated <em>all</em> inputs
-            to an agent as <strong>entities</strong> that flow through a <strong>harness</strong>?
+            So what can we do about this? Well, here's the key insight: what if we had a unified way to think about all these disparate concepts?
+            Let me introduce three fundamental building blocks:
           </p>
+
+          <div className="two-column">
+            <div className="column-card">
+              <h3>LLM</h3>
+              <p>The Large Language Model—a pure function that takes context as input and produces reasoning and actions as output.
+              It's the "brain" but critically, it has no direct access to the world.</p>
+            </div>
+            <div className="column-card">
+              <h3>Harness</h3>
+              <p>The orchestration layer that manages what goes into the LLM's context and executes the actions it requests.
+              Think of it as the "body" that bridges the LLM to the world.</p>
+            </div>
+          </div>
+
+          <p className="lecture-text">
+            Now here's where it gets interesting. What flows between the harness and the LLM? <strong>Entities</strong>—
+            a unified abstraction for <em>everything</em>: tools, skills, memory, user input, results. They all become entities!
+          </p>
+
           <div className="key-equation">
             <div className="equation">Agent = LLM + Harness</div>
           </div>
           <p className="lecture-text">
-            That's it! An agent is just the composition of two components. The beauty here is that we've
-            found the right level of abstraction. Not too high, not too low. Just right.
+            That's it! An agent is just the composition of these two components with entities flowing between them.
+            The beauty here is that we've found the right level of abstraction. Not too high, not too low. Just right.
           </p>
         </div>
       </section>
@@ -247,7 +268,7 @@ function App() {
               <em>For the purposes of this calculus, we treat different LLMs as interchangeable.</em>
             </p>
             <p className="lecture-text">
-              Now, I can hear you protesting: "But Simon, GPT-4 is different from Claude!" Yes, yes, in practice
+              Now, I can hear you protesting: "But, Hey, GPT-4 is different from Claude!" Yes, yes, in practice
               they differ. But for our formal model, we're going to abstract over those differences.
             </p>
           </div>
@@ -403,9 +424,213 @@ function App() {
         </div>
       </section>
 
-      {/* The Agent Loop */}
+      {/* The Load Function */}
       <section
         ref={el => { if (el) sectionsRef.current[7] = el }}
+        className="content-section"
+      >
+        <div className="section-content">
+          <h2 className="section-title">The Load Function</h2>
+          <p className="lecture-text">
+            Now, let's talk about something absolutely critical: how does the harness actually manage the limited context window?
+            This is where the rubber meets the road. The <strong>load</strong> function has four key responsibilities:
+          </p>
+
+          <div className="load-responsibilities-grid">
+            <div className="load-responsibility-card">
+              <div className="responsibility-icon">🔍</div>
+              <h3>FILTERING</h3>
+              <p className="responsibility-subtitle">What Goes In?</p>
+              <ul>
+                <li>Evaluates relevance of each entity</li>
+                <li>Considers: recency, type priority, user intent</li>
+                <li>Example: Tool results more relevant than old reasoning</li>
+              </ul>
+            </div>
+
+            <div className="load-responsibility-card">
+              <div className="responsibility-icon">🗜️</div>
+              <h3>COMPRESSION</h3>
+              <p className="responsibility-subtitle">How Much Detail?</p>
+              <ul>
+                <li>Adjusts verbosity based on context pressure</li>
+                <li>Uses atomic operations: summarize, omit, paraphrase</li>
+                <li>Example: "full" reasoning → "summary"</li>
+              </ul>
+            </div>
+
+            <div className="load-responsibility-card">
+              <div className="responsibility-icon">📑</div>
+              <h3>ORDERING</h3>
+              <p className="responsibility-subtitle">What Sequence?</p>
+              <ul>
+                <li>Determines entity position in context</li>
+                <li>System prompt always first, user input near end</li>
+                <li>Example: [system, memory, history, current_task, tools]</li>
+              </ul>
+            </div>
+
+            <div className="load-responsibility-card">
+              <div className="responsibility-icon">🗑️</div>
+              <h3>EVICTION</h3>
+              <p className="responsibility-subtitle">What Gets Removed?</p>
+              <ul>
+                <li>Decides what to drop when context is full</li>
+                <li>Strategies: FIFO, LRU, importance-based</li>
+                <li>Example: Drop old tool results before current reasoning</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="function-signature">
+            <code>load(world_state, entities, config) → Context</code>
+          </div>
+
+          <p className="lecture-text">
+            You see, the load function is the gatekeeper. It's constantly making decisions about what information
+            the LLM needs to see, and crucially, at what level of detail. This is where the art meets the science!
+          </p>
+        </div>
+      </section>
+
+      {/* The Execute Function */}
+      <section
+        ref={el => { if (el) sectionsRef.current[8] = el }}
+        className="content-section highlight-section"
+      >
+        <div className="section-content">
+          <h2 className="section-title">The Execute Function</h2>
+          <p className="lecture-text">
+            Now let's look at the other side of the coin: the <strong>execute</strong> function. While load brings
+            entities into context, execute takes actions out into the world and brings the results back as new entities.
+          </p>
+
+          <div className="execute-section">
+            <div className="execute-explanation">
+              <h3>Responsibilities</h3>
+              <ul>
+                <li>Takes LLM output (reasoning + actions)</li>
+                <li>Executes actions in the world (API calls, file operations, etc.)</li>
+                <li>Converts results into entities</li>
+                <li>Updates world state</li>
+                <li>Returns new entities to the load function</li>
+              </ul>
+
+              <div className="function-signature">
+                <code>execute(action, world_state) → (new_entities, updated_world_state)</code>
+              </div>
+            </div>
+
+            <div className="state-transition-diagram">
+              <h3>State Transition</h3>
+              <div className="diagram-flow">
+                <div className="diagram-box">World State (t)</div>
+                <div className="diagram-arrow">↓</div>
+                <div className="diagram-box accent">Execute</div>
+                <div className="diagram-arrow">↓</div>
+                <div className="diagram-box">World State (t+1)</div>
+                <div className="diagram-arrow side">→ New Entities →</div>
+              </div>
+
+              <div className="example-flow">
+                <p><strong>Example Flow:</strong></p>
+                <ol>
+                  <li>LLM outputs: tool_call("read_file", "config.json")</li>
+                  <li>Execute runs: fs.readFile("config.json")</li>
+                  <li>Result becomes: Entity(type=tool_result, content="&#123; db_port: 3306 &#125;")</li>
+                  <li>World state updated: files_accessed += ["config.json"]</li>
+                  <li>Entity added to entities pool</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          <p className="lecture-text">
+            So you see, execute is the bridge from the LLM's world of text back to the real world of actions and state changes.
+            It closes the loop, turning outputs into inputs for the next iteration. Elegant, isn't it?
+          </p>
+        </div>
+      </section>
+
+      {/* Atomic Load Operations */}
+      <section
+        ref={el => { if (el) sectionsRef.current[9] = el }}
+        className="content-section"
+      >
+        <div className="section-content">
+          <h2 className="section-title">Atomic Load Operations</h2>
+          <p className="lecture-text">
+            Right, now let me show you the building blocks of compression. These are the five fundamental operations
+            that the load function uses to manage context pressure:
+          </p>
+
+          <div className="atomic-operations-grid">
+            <div className="operation-card">
+              <h3>SUMMARIZE</h3>
+              <div className="operation-transform">
+                <div className="transform-line">Full reasoning (200 tokens)</div>
+                <div className="transform-arrow">→</div>
+                <div className="transform-line">Summary (50 tokens)</div>
+              </div>
+              <p className="operation-use"><strong>Use:</strong> When context pressure is high, preserve meaning while reducing tokens</p>
+            </div>
+
+            <div className="operation-card">
+              <h3>ELABORATE</h3>
+              <div className="operation-transform">
+                <div className="transform-line">Compressed summary (50 tokens)</div>
+                <div className="transform-arrow">→</div>
+                <div className="transform-line">Full detail (200 tokens)</div>
+              </div>
+              <p className="operation-use"><strong>Use:</strong> When context is available, restore detail for important entities</p>
+            </div>
+
+            <div className="operation-card">
+              <h3>OMIT</h3>
+              <div className="operation-transform">
+                <div className="transform-line">Entity with content</div>
+                <div className="transform-arrow">→</div>
+                <div className="transform-line">Metadata reference only</div>
+              </div>
+              <p className="operation-use"><strong>Use:</strong> When content not immediately relevant, keep reference for retrieval</p>
+            </div>
+
+            <div className="operation-card">
+              <h3>PARAPHRASE</h3>
+              <div className="operation-transform">
+                <div className="transform-line">Original phrasing</div>
+                <div className="transform-arrow">→</div>
+                <div className="transform-line">Equivalent but shorter</div>
+              </div>
+              <p className="operation-use"><strong>Use:</strong> Reduce tokens while keeping identical semantics</p>
+            </div>
+
+            <div className="operation-card">
+              <h3>GROUP</h3>
+              <div className="operation-transform">
+                <div className="transform-line">Multiple similar entities</div>
+                <div className="transform-arrow">→</div>
+                <div className="transform-line">Single combined entity</div>
+              </div>
+              <p className="operation-use"><strong>Use:</strong> Merge repeated or related information to save space</p>
+            </div>
+          </div>
+
+          <div className="function-signature">
+            <code>Operation(entity_in, verbosity_target) → entity_out</code>
+          </div>
+
+          <p className="lecture-text">
+            These atomic operations are the tools in the load function's toolbox. They're simple individually,
+            but combined strategically, they allow sophisticated context management. It's rather like having
+            a compression algorithm, but one that's semantic rather than syntactic!
+          </p>
+        </div>
+      </section>
+
+      {/* The Agent Loop */}
+      <section
+        ref={el => { if (el) sectionsRef.current[10] = el }}
         className="content-section demo-section"
       >
         <div className="section-content">
@@ -450,13 +675,31 @@ function App() {
             </div>
 
             <div className="context-visualization">
-              <h3>Context Window</h3>
+              <div className="context-header">
+                <h3>Context Window</h3>
+                {contextEntities.length > 0 && (
+                  <div className="capacity-indicator">
+                    <div className="capacity-text">
+                      Entities: {contextEntities.length}/{contextCapacity} ({getCapacityPercentage()}% full)
+                    </div>
+                    <div className="capacity-bar">
+                      <div
+                        className={`capacity-fill ${getCapacityPercentage() > 70 ? 'pressure' : ''}`}
+                        style={{ width: `${getCapacityPercentage()}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="context-entities">
                 {contextEntities.length > 0 ? (
                   contextEntities.map(entity => (
-                    <div key={entity.id} className={`mini-entity ${entity.type}`}>
+                    <div key={entity.id} className={`mini-entity ${entity.type} ${entity.verbosity !== 'full' ? 'compressed' : ''}`}>
                       <span className="mini-type">{entity.type}</span>
                       <span className="mini-content">{entity.content}</span>
+                      {entity.verbosity !== 'full' && (
+                        <span className="compression-badge">{entity.verbosity}</span>
+                      )}
                     </div>
                   ))
                 ) : (
@@ -476,9 +719,191 @@ function App() {
         </div>
       </section>
 
+      {/* Context Management Strategies */}
+      <section
+        ref={el => { if (el) sectionsRef.current[11] = el }}
+        className="content-section highlight-section"
+      >
+        <div className="section-content">
+          <h2 className="section-title">Context Management Strategies</h2>
+          <p className="lecture-text">
+            Now, here's a practical question: when should you compress, when should you omit, and when should you evict?
+            Let me show you three fundamental strategies for context management:
+          </p>
+
+          <div className="strategy-comparison-grid">
+            <div className="strategy-card">
+              <h3>Recency-Based</h3>
+              <div className="strategy-description">
+                <p><strong>Principle:</strong> Time matters most</p>
+                <ul>
+                  <li>Keep recent entities in full verbosity</li>
+                  <li>Compress entities older than N turns</li>
+                  <li>Evict entities older than M turns</li>
+                </ul>
+                <p className="strategy-best-for"><strong>Best for:</strong> Linear tasks, sequential workflows</p>
+              </div>
+            </div>
+
+            <div className="strategy-card">
+              <h3>Importance-Based</h3>
+              <div className="strategy-description">
+                <p><strong>Principle:</strong> Relevance matters most</p>
+                <ul>
+                  <li>Rank entities by relevance score</li>
+                  <li>Keep high-importance entities full</li>
+                  <li>Compress/evict low-importance</li>
+                </ul>
+                <p className="strategy-best-for"><strong>Best for:</strong> Complex reasoning, long sessions</p>
+              </div>
+            </div>
+
+            <div className="strategy-card">
+              <h3>Type-Priority</h3>
+              <div className="strategy-description">
+                <p><strong>Principle:</strong> Entity type determines treatment</p>
+                <ul>
+                  <li>System prompts: always full</li>
+                  <li>User input: always full</li>
+                  <li>Reasoning: compress after use</li>
+                  <li>Tool results: evict after acknowledged</li>
+                </ul>
+                <p className="strategy-best-for"><strong>Best for:</strong> Resource-constrained environments</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="decision-tree">
+            <h3>Decision Thresholds</h3>
+            <div className="threshold-flow">
+              <div className="threshold-item">
+                <span className="threshold-condition">Context &lt; 70% full</span>
+                <span className="threshold-arrow">→</span>
+                <span className="threshold-action">Keep all entities at full verbosity</span>
+              </div>
+              <div className="threshold-item">
+                <span className="threshold-condition">Context 70-90% full</span>
+                <span className="threshold-arrow">→</span>
+                <span className="threshold-action">Start compressing old reasoning</span>
+              </div>
+              <div className="threshold-item">
+                <span className="threshold-condition">Context &gt; 90% full</span>
+                <span className="threshold-arrow">→</span>
+                <span className="threshold-action">Evict old tool results, compress everything</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="lecture-text">
+            You see, context management isn't just about space—it's about making strategic decisions about what
+            information the LLM needs at each moment. It's rather like paging in an operating system, isn't it?
+          </p>
+        </div>
+      </section>
+
+      {/* Entity Dimensions Explorer */}
+      <section
+        ref={el => { if (el) sectionsRef.current[12] = el }}
+        className="content-section"
+      >
+        <div className="section-content">
+          <h2 className="section-title">Entity Dimensions</h2>
+          <p className="lecture-text">
+            Let's explore the design space of entities. Think of this as a three-dimensional space where each
+            entity can be positioned along multiple axes:
+          </p>
+
+          <div className="dimension-cards">
+            <div className="dimension-card-detail">
+              <h3>Content Verbosity</h3>
+              <div className="verbosity-scale">
+                <div className="verbosity-level">
+                  <strong>full</strong> → Complete content (100% tokens)
+                </div>
+                <div className="verbosity-level">
+                  <strong>summary</strong> → Key points only (30-50% tokens)
+                </div>
+                <div className="verbosity-level">
+                  <strong>digest</strong> → Just the headline (10% tokens)
+                </div>
+                <div className="verbosity-level">
+                  <strong>reference</strong> → Metadata only (0% content tokens)
+                </div>
+              </div>
+            </div>
+
+            <div className="dimension-card-detail">
+              <h3>Metadata Richness</h3>
+              <div className="metadata-scale">
+                <div className="metadata-level">
+                  <strong>minimal</strong> → type, content
+                </div>
+                <div className="metadata-level">
+                  <strong>standard</strong> → + timestamp, id
+                </div>
+                <div className="metadata-level">
+                  <strong>rich</strong> → + verbosity, source, dependencies
+                </div>
+                <div className="metadata-level">
+                  <strong>full</strong> → + custom fields, embeddings
+                </div>
+              </div>
+            </div>
+
+            <div className="dimension-card-detail">
+              <h3>Structural Complexity</h3>
+              <div className="structure-scale">
+                <div className="structure-level">
+                  <strong>atomic</strong> → Single piece of information
+                </div>
+                <div className="structure-level">
+                  <strong>composite</strong> → Combines multiple entities
+                </div>
+                <div className="structure-level">
+                  <strong>hierarchical</strong> → Nested structure
+                </div>
+                <div className="structure-level">
+                  <strong>graph</strong> → Cross-referenced entities
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="entity-evolution-example">
+            <h3>Example: Entity Evolution</h3>
+            <div className="evolution-steps">
+              <div className="evolution-step">
+                <strong>Full (500 tokens)</strong>
+                <code>"I need to read the config.json file to check the current database port setting, then compare it with the expected value..."</code>
+              </div>
+              <div className="evolution-arrow">↓</div>
+              <div className="evolution-step">
+                <strong>Summary (150 tokens)</strong>
+                <code>"Check db port in config.json"</code>
+              </div>
+              <div className="evolution-arrow">↓</div>
+              <div className="evolution-step">
+                <strong>Digest (20 tokens)</strong>
+                <code>"Read config"</code>
+              </div>
+              <div className="evolution-arrow">↓</div>
+              <div className="evolution-step">
+                <strong>Reference (metadata only)</strong>
+                <code>&#123; id: "reasoning_42", type: "reasoning", omitted: true &#125;</code>
+              </div>
+            </div>
+          </div>
+
+          <p className="lecture-text">
+            This dimensional thinking gives us precise control over how entities occupy context space. It's
+            rather elegant, don't you think?
+          </p>
+        </div>
+      </section>
+
       {/* Agent Patterns */}
       <section
-        ref={el => { if (el) sectionsRef.current[8] = el }}
+        ref={el => { if (el) sectionsRef.current[13] = el }}
         className="content-section"
       >
         <div className="section-content">
@@ -575,7 +1000,7 @@ function App() {
 
       {/* Conclusion */}
       <section
-        ref={el => { if (el) sectionsRef.current[9] = el }}
+        ref={el => { if (el) sectionsRef.current[14] = el }}
         className="content-section conclusion-section"
       >
         <div className="section-content">
