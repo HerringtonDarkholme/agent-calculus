@@ -40,11 +40,20 @@ To simplify our calculus, we make three foundational assumptions:
 **Assumption 1: Limited Context**
 > LLM context windows are finite and constrained. Context is the primary scarce resource in agent systems.
 
+Note: LLM's context window can be larger in future. For example,
+* a conditional memory lookup can spare more attention to longer context https://github.com/deepseek-ai/Engram?tab=readme-ov-file
+* Extending the Context of Pretrained LLMs by Dropping their Positional Embeddings (DroPE) https://pub.sakana.ai/DroPE/
+
 **Assumption 2: Static Capabilities**
 > LLMs do not perform continual learning during inference. Their capabilities are fixed at deployment.
 
+Note: this can be changed in future. So some routine context loading can be done by updating model weights
+* see Nested Learning: The Illusion of Deep Learning Architecture. https://abehrouz.github.io/files/NL.pdf
+
 **Assumption 3: LLM Homogeneity**
-> For the purposes of this calculus, we treat different LLMs as interchangeable. (In practice they differ, but this simplifies our model.)
+> For the purposes of this calculus, we treat different LLMs as interchangeable.
+
+Note: In practice they differ, but this simplifies our model.
 
 ## 3. Fundamental Definitions
 
@@ -148,10 +157,10 @@ Entity: FileReadTool
       - offset: int (optional, start line)
       - limit: int (optional, number of lines)
     Returns: string (file contents)
-  
+
   Content (summary):
     read_file: Read file contents
-  
+
   Metadata:
     type: tool_description
     static: true
@@ -163,12 +172,12 @@ Entity: FileReadTool
 Entity: ConversationMemory
   Content (full):
     [Last 50 conversation turns with full context]
-  
+
   Content (digest):
     Summary: User is implementing auth system for web app.
     Currently debugging JWT token validation.
     Tech stack: Node.js, Express, PostgreSQL.
-  
+
   Metadata:
     type: memory
     static: false (updated after each turn)
@@ -186,10 +195,10 @@ Entity: GitCommitSkill
     3. Draft commit message following repo conventions
     4. Execute git commit with message
     5. Verify with git log
-  
+
   Content (summary):
     GitCommitSkill: Create git commits following best practices
-  
+
   Metadata:
     type: skill
     static: true
@@ -308,25 +317,25 @@ def agent_loop(user_input, world):
     ctx = Context()
     entity = Entity(content=user_input, type="user_input")
     entities = discover_available_entities(world)  # tools, skills, memory, etc.
-    
+
     while not should_stop(ctx):
         # LOAD PHASE
         # Pack relevant entities into context
         ctx = harness.load(ctx, entity, entities)
-        
+
         # REASONING PHASE
         # LLM processes context and generates action
         reasoning, action = llm(ctx)
-        
+
         # Add reasoning to context for continuity
         ctx = ctx.append(reasoning)
-        
+
         # EXECUTION PHASE
         # Execute action in world, get result as new entity
         entity, world = harness.execute(action, world)
-        
+
         # New entity becomes input for next iteration
-    
+
     return ctx, world
 ```
 
@@ -338,11 +347,11 @@ def agent_loop(user_input, world):
 ```
 Load Phase:
   ctx = [system_prompt, memory_summary, file_tools, user_input]
-  
+
 LLM Phase:
   reasoning: "Need to read config.json first"
   action: read_file("config.json")
-  
+
 Execute Phase:
   entity: {type: "tool_result", content: "{\n  \"db_port\": 3306\n  ...\n}"}
   world: unchanged
@@ -351,14 +360,14 @@ Execute Phase:
 **Turn 2**
 ```
 Load Phase:
-  ctx = [system_prompt, memory_summary, file_tools, 
+  ctx = [system_prompt, memory_summary, file_tools,
          tool_result_FULL, previous_reasoning, edit_tools]
   # Note: file tool result loaded in full for LLM to analyze
-  
+
 LLM Phase:
   reasoning: "Database port is 3306 but should be 5432 for PostgreSQL"
   action: edit_file("config.json", old="3306", new="5432")
-  
+
 Execute Phase:
   entity: {type: "tool_result", content: "Successfully edited config.json"}
   world: config.json modified
@@ -367,16 +376,16 @@ Execute Phase:
 **Turn 3**
 ```
 Load Phase:
-  ctx = [system_prompt, memory_summary, 
+  ctx = [system_prompt, memory_summary,
          previous_tool_result_DIGEST,  # compressed now!
          current_tool_result,
          previous_reasoning]
   # Note: first tool result compressed to save space
-  
+
 LLM Phase:
   reasoning: "Task complete. Config fixed."
   action: respond("Fixed! Changed database port from 3306 to 5432")
-  
+
 Execute Phase:
   entity: {type: "agent_response"}
   should_stop: true
@@ -441,10 +450,10 @@ SubAgentTool = Tool(
     execute=lambda prompt, world: {
         # Create new agent with fresh context
         subagent_ctx = Context([system_prompt, Entity(prompt)])
-        
+
         # Run subagent loop until completion
         result_ctx, world' = agent_loop(prompt, world)
-        
+
         # Return subagent's result as entity
         return Entity(
             type="subagent_result",
@@ -460,18 +469,18 @@ SubAgentTool = Tool(
 ```
 Parent Agent:
   User: "Research React hooks and write a summary"
-  
+
   Turn 1:
     action: spawn_subagent("Research React hooks from documentation")
-    
+
     Subagent Loop:
       Turn 1: search("React hooks documentation")
       Turn 2: read(url)
       Turn 3: summarize(content)
       Turn 4: respond(summary)
-    
+
     entity: {type: "subagent_result", content: "React hooks are..."}
-  
+
   Turn 2:
     Context: [subagent_result, user_input]
     action: write_file("react-hooks-summary.md", content=subagent_result)
@@ -487,13 +496,13 @@ Parent Agent:
 def rag_load(ctx, entity, entities):
     # Extract query from latest entity (user input or reasoning)
     query = extract_query(entity)
-    
+
     # Search knowledge base (world operation)
     relevant_docs = semantic_search(world.knowledge_base, query, top_k=5)
-    
+
     # Convert docs to entities
     doc_entities = [Entity(doc, type="retrieved_doc") for doc in relevant_docs]
-    
+
     # Standard load with doc entities included
     return load(ctx, entity, entities + doc_entities)
 ```
@@ -537,17 +546,17 @@ ReflectionTool = Tool(
     execute=lambda work, world: {
         critique_prompt = f"""
         Review this work: {work}
-        
+
         Identify:
         1. Errors or bugs
         2. Missed requirements
         3. Potential improvements
         """
-        
+
         # Spawn critic agent with different system prompt
         critic_ctx = Context([critic_system_prompt, Entity(critique_prompt)])
         result_ctx, world' = agent_loop(critique_prompt, world)
-        
+
         return Entity(type="reflection", content=extract_result(result_ctx)), world'
     }
 )
@@ -572,18 +581,18 @@ Agent:
 def parallel_agents(task, world):
     # Decompose task
     subtasks = decompose(task)
-    
+
     # Spawn agent for each subtask
     results = []
     for subtask in subtasks:
         # Each agent runs independently
         result_ctx, world = agent_loop(subtask, world)
         results.append(extract_result(result_ctx))
-    
+
     # Coordinator agent synthesizes results
     synthesis_prompt = f"Combine these results: {results}"
     final_ctx, world = agent_loop(synthesis_prompt, world)
-    
+
     return final_ctx, world
 ```
 
@@ -650,7 +659,7 @@ if entity.size > 10KB:
     entity.content_full = entity.content
     entity.content = llm_summarize(entity.content, max_tokens=500)
     entity.verbosity = "digest"
-    
+
     # Store full content in world for re-access if needed
     world.store(entity.id, entity.content_full)
 ```
@@ -746,28 +755,28 @@ Tools can define descriptions at multiple granularities:
 ```python
 Tool.descriptions = {
     "title": "read_file",
-    
+
     "one_liner": "Read file contents",
-    
+
     "summary": """
         read_file(path) → string
         Reads and returns file contents from disk.
     """,
-    
+
     "detailed": """
         read_file(path, offset=0, limit=None) → string
-        
+
         Reads file contents from the filesystem.
-        
+
         Parameters:
         - path: Absolute path to file
         - offset: Starting line number (0-indexed)
         - limit: Maximum number of lines to read
-        
+
         Returns: File contents as string
-        
+
         Errors: FileNotFoundError, PermissionError
-        
+
         Example:
             content = read_file("/home/user/config.json")
     """,
@@ -833,7 +842,7 @@ response = llm(context)
 entities = [
     Entity(system_prompt, loading="preloaded"),
     Entity(user_input, loading="preloaded"),
-    *[Entity(doc, loading="dynamic", discovered_by="semantic_search") 
+    *[Entity(doc, loading="dynamic", discovered_by="semantic_search")
       for doc in vector_db.search(user_input)]
 ]
 
@@ -913,7 +922,7 @@ Entity(Codebase) = {
 }
 
 # Load strategy:
-# - Initially load: Entity(Codebase, verbosity="summary") 
+# - Initially load: Entity(Codebase, verbosity="summary")
 #   → "Codebase contains 50 modules in 3 categories"
 # - On demand: Entity(Module1, verbosity="full")
 ```
@@ -1098,5 +1107,5 @@ We invite the community to:
 
 ---
 
-*Document Version: 1.0*  
+*Document Version: 1.0*
 *Last Updated: January 15, 2026*
