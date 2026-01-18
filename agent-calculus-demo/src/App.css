@@ -1154,6 +1154,23 @@ body {
   color: var(--text-tertiary);
 }
 
+.footer-author {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 1rem;
+}
+
+.footer-author a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--transition-base);
+}
+
+.footer-author a:hover {
+  color: var(--accent-light);
+  text-decoration: underline;
+}
+
 /* Context Management Strategies */
 .strategy-comparison-grid {
   display: grid;

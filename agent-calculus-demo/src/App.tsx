@@ -1059,6 +1059,9 @@ function App() {
       <footer className="footer">
         <p>Built with the Agent Calculus framework</p>
         <p className="footer-small">A unified approach to AI agent design • Inspired by Simon Peyton Jones</p>
+        <p className="footer-author">
+          Built by <a href="https://ast-grep.github.io/" target="_blank" rel="noopener noreferrer">Herrington Darkholme</a>, author of <a href="https://ast-grep.github.io/" target="_blank" rel="noopener noreferrer">ast-grep</a>
+        </p>
       </footer>
     </div>
   )
