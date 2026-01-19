@@ -181,6 +181,71 @@ const myCustomTool: Tool = {
 };
 ```
 
+## Skills System
+
+Skills are reusable workflows and instructions that can be dynamically loaded into context when needed.
+
+### Creating Skills
+
+```typescript
+import { createSkill, createSkillRegistry, createSkillTools } from "agent-calculus";
+
+// Define a skill
+const codeReviewSkill = createSkill({
+  name: "code_review",
+  description: "Provides guidance for conducting thorough code reviews",
+  keywords: ["review", "code quality", "feedback"],
+  instructions: `
+When conducting a code review, follow these steps:
+
+1. **Readability & Style**
+   - Check naming conventions and formatting
+   - Ensure comments are clear
+
+2. **Correctness**
+   - Verify logic and edge cases
+   - Check error handling
+
+3. **Security**
+   - Look for vulnerabilities
+   - Verify input validation
+`,
+});
+
+// Create a skill registry
+const registry = createSkillRegistry();
+registry.register(codeReviewSkill);
+
+// Create skill tools (list_skills, load_skill)
+const skillTools = createSkillTools(registry);
+
+// Add to your agent
+const agent = await createAgent({
+  systemPrompt: "You are a helpful assistant with access to specialized skills.",
+  workingDirectory: process.cwd(),
+  maxTokens: 128000,
+  tools: [...fileTools, ...skillTools],
+});
+```
+
+### Using Skills
+
+The agent can use two tools to work with skills:
+
+1. **`list_skills`**: List all available skills
+2. **`load_skill`**: Load a skill's instructions into context
+
+```typescript
+// The agent can discover and load skills dynamically
+await agent.chat("What skills do you have?");
+// Agent will call list_skills tool
+
+await agent.chat("Load the code_review skill and review this code...");
+// Agent will call load_skill tool, then use the loaded instructions
+```
+
+Skills are loaded as tool results, making their instructions immediately available in the LLM's context.
+
 ## Advanced: Custom Harness
 
 You can customize the load function to implement custom entity selection:

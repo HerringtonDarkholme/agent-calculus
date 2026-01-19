@@ -107,4 +107,16 @@ export {
   writeFileTool,
   listFilesTool,
   fileTools,
+  createSkillTools,
 } from "./patterns/tools/index.js";
+
+// =============================================================================
+// Skills
+// =============================================================================
+
+export type { SkillOptions } from "./patterns/skills.js";
+export {
+  createSkill,
+  createSkillRegistry,
+  SkillRegistry,
+} from "./patterns/skills.js";
