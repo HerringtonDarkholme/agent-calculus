@@ -92,7 +92,6 @@ function isStaticType(type: EntityType): boolean {
     case "user_input":
     case "tool_result":
     case "assistant_message":
-    case "assistant_with_tools":
     case "reasoning":
       return false;
     default:
@@ -110,11 +109,10 @@ function getRoleForType(type: EntityType): "user" | "assistant" | "system" {
     case "user_input":
       return "user";
     case "assistant_message":
-    case "assistant_with_tools":
     case "reasoning":
       return "assistant";
     case "tool_result":
-      return "user"; // Tool results are typically sent as user messages
+      return "user"; // Tool results are sent as tool messages, but entity role is user
     default:
       return "system";
   }

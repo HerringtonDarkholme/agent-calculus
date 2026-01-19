@@ -30,7 +30,6 @@ export type EntityType =
   | "user_input"
   | "tool_result"
   | "assistant_message"
-  | "assistant_with_tools"
   | "reasoning";
 
 /**
@@ -97,14 +96,6 @@ export interface Entity {
   content: EntityContent;
   /** Entity metadata */
   metadata: EntityMetadata;
-  /** Structured data (for tool calls, etc.) */
-  data?: {
-    toolCalls?: Array<{
-      toolCallId: string;
-      toolName: string;
-      args: Record<string, unknown>;
-    }>;
-  };
 }
 
 // =============================================================================
@@ -127,6 +118,8 @@ export interface LoadedEntity {
 export interface Context {
   /** Entities currently in context */
   entities: LoadedEntity[];
+  /** Message history (for LLM API) */
+  messages: CoreMessage[];
   /** Maximum tokens allowed */
   maxTokens: number;
   /** Current token usage */

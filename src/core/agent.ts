@@ -91,8 +91,8 @@ export class Agent {
    * This implements the core agent loop:
    * while (true):
    *   1. LOAD: Pack entities into context
-   *   2. REASON: LLM processes and generates action
-   *   3. EXECUTE: Run tool in world
+   *   2. REASON: LLM processes and generates actions
+   *   3. EXECUTE: Run tools in world
    *   4. If no tool call, return response
    */
   async chat(userInput: string): Promise<ChatResult> {
@@ -101,15 +101,21 @@ export class Agent {
 
     const toolCallsMade: ChatResult["toolCalls"] = [];
 
-    // Create user input entity
-    let entity: Entity | null = createUserInput(userInput);
+    // Add user message to context
+    this.ctx = {
+      ...this.ctx,
+      messages: [
+        ...this.ctx.messages,
+        { role: "user", content: userInput },
+      ],
+    };
+
+    // Create user input entity (for tracking/memory)
+    const userEntity = createUserInput(userInput);
+    this.ctx = this.harness.load(this.ctx, userEntity, this.availableEntities);
 
     // Agent loop: process until we get a response (no tool call)
     while (true) {
-      // LOAD PHASE
-      this.ctx = this.harness.load(this.ctx, entity, this.availableEntities);
-      entity = null; // Clear for next iteration
-
       // REASONING PHASE
       this.log("Invoking LLM...");
       const llmResponse = await invokeLLM(this.ctx, this.tools, this.llmConfig);
@@ -120,35 +126,44 @@ export class Agent {
       // If no tool calls, just a text response - we're done
       if (llmResponse.toolCalls.length === 0) {
         this.log("No tool calls, returning response");
-        // Add the text response to context
-        if (llmResponse.text) {
-          const assistantEntity = createAssistantMessage(llmResponse.text);
-          this.ctx = appendEntity(this.ctx, assistantEntity);
-        }
+
+        // Add assistant message to context
+        this.ctx = {
+          ...this.ctx,
+          messages: [
+            ...this.ctx.messages,
+            { role: "assistant", content: llmResponse.text },
+          ],
+        };
+
         return {
           response: llmResponse.text,
           toolCalls: toolCallsMade,
         };
       }
 
-      // If there are tool calls, create an assistant_with_tools entity
-      const assistantWithToolsEntity = createEntity({
-        content: llmResponse.text || "Calling tools...",
-        type: "assistant_with_tools",
-        role: "assistant",
-      });
-      // Add the tool calls as structured data
-      assistantWithToolsEntity.data = {
-        toolCalls: llmResponse.toolCalls.map((tc) => ({
-          toolCallId: tc.toolCallId,
-          toolName: tc.toolName,
-          args: tc.args,
-        })),
+      // LLM made tool calls - add assistant message with tool calls
+      this.ctx = {
+        ...this.ctx,
+        messages: [
+          ...this.ctx.messages,
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: llmResponse.text },
+              ...llmResponse.toolCalls.map((tc) => ({
+                type: "tool-call" as const,
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                args: tc.args,
+              })),
+            ],
+          },
+        ],
       };
-      this.ctx = appendEntity(this.ctx, assistantWithToolsEntity);
 
-      // EXECUTION PHASE - process all tool calls and collect results
-      const toolResults: Entity[] = [];
+      // EXECUTION PHASE - execute all tool calls
+      const toolResultParts = [];
       for (const toolCall of llmResponse.toolCalls) {
         this.log(`Executing tool: ${toolCall.toolName}`);
 
@@ -162,9 +177,16 @@ export class Agent {
         // Execute the tool
         const result = await this.harness.execute(action, this.world, this.tools);
 
-        // Update world and collect result
+        // Update world
         this.world = result.world;
-        toolResults.push(result.entity);
+
+        // Collect tool result
+        toolResultParts.push({
+          type: "tool-result" as const,
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          result: result.entity.content.full,
+        });
 
         // Track the tool call
         toolCallsMade.push({
@@ -173,16 +195,24 @@ export class Agent {
           result: result.entity.content.full,
         });
 
+        // Store result as entity (for memory/compression/context management)
+        // This is separate from messages - entities are inputs, messages are API format
+        this.ctx = appendEntity(this.ctx, result.entity);
+
         this.log(`Tool result: ${result.entity.content.full.slice(0, 100)}...`);
       }
 
-      // Add all tool results to context at once
-      for (const resultEntity of toolResults) {
-        this.ctx = appendEntity(this.ctx, resultEntity);
-      }
-
-      // Clear entity so load doesn't try to add it again
-      entity = null;
+      // Add tool results message
+      this.ctx = {
+        ...this.ctx,
+        messages: [
+          ...this.ctx.messages,
+          {
+            role: "tool",
+            content: toolResultParts,
+          },
+        ],
+      };
 
       // Continue loop to process tool results
     }

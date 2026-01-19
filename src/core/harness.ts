@@ -54,7 +54,7 @@ export function createHarness(config?: HarnessConfig): Harness {
 
   return {
     /**
-     * Load entities into context.
+     * Load entities into context and rebuild messages.
      *
      * Responsibilities:
      * 1. Filter: Select only relevant entities

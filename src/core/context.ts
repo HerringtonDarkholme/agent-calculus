@@ -12,6 +12,7 @@ import { estimateEntityTokens, getEntityContent } from "./entity.js";
 export function createContext(maxTokens: number = 128000): Context {
   return {
     entities: [],
+    messages: [],
     maxTokens,
     currentTokens: 0,
   };
@@ -100,100 +101,10 @@ export function updateVerbosity(
 
 /**
  * Convert context to messages for Vercel AI SDK.
- *
- * Groups entities by their role and handles tool results specially.
+ * Simply returns the message array that's been built up.
  */
 export function contextToMessages(ctx: Context): CoreMessage[] {
-  const messages: CoreMessage[] = [];
-  let currentToolResults: Array<{ entity: Entity; verbosity: Verbosity }> = [];
-
-  for (const { entity, verbosity } of ctx.entities) {
-    const content = getEntityContent(entity, verbosity);
-    const role = entity.metadata.role ?? "user";
-
-    // Handle tool results specially - they need to be grouped with their call ID
-    if (entity.metadata.type === "tool_result") {
-      currentToolResults.push({ entity, verbosity });
-      continue;
-    }
-
-    // If we have pending tool results and hit a non-tool-result, flush them
-    if (currentToolResults.length > 0) {
-      messages.push(createToolResultMessage(currentToolResults));
-      currentToolResults = [];
-    }
-
-    // Handle assistant messages with tool calls
-    if (entity.metadata.type === "assistant_with_tools" && entity.data?.toolCalls) {
-      messages.push({
-        role: "assistant",
-        content: [
-          { type: "text", text: content },
-          ...entity.data.toolCalls.map((tc) => ({
-            type: "tool-call" as const,
-            toolCallId: tc.toolCallId,
-            toolName: tc.toolName,
-            args: tc.args,
-          })),
-        ],
-      });
-      continue;
-    }
-
-    // Handle based on role
-    switch (role) {
-      case "system":
-        messages.push({
-          role: "system",
-          content,
-        });
-        break;
-      case "user":
-        messages.push({
-          role: "user",
-          content,
-        });
-        break;
-      case "assistant":
-        messages.push({
-          role: "assistant",
-          content,
-        });
-        break;
-    }
-  }
-
-  // Flush any remaining tool results
-  if (currentToolResults.length > 0) {
-    messages.push(createToolResultMessage(currentToolResults));
-  }
-
-  return messages;
-}
-
-/**
- * Create a tool result message from accumulated tool results.
- */
-function createToolResultMessage(
-  results: Array<{ entity: Entity; verbosity: Verbosity }>
-): CoreMessage {
-  const toolResults: ToolResultPart[] = results.map(({ entity, verbosity }) => {
-    const content = getEntityContent(entity, verbosity);
-    // Extract tool call ID from entity ID (format: tool-result-{toolCallId})
-    const toolCallId = entity.id.replace("tool-result-", "");
-
-    return {
-      type: "tool-result" as const,
-      toolCallId,
-      toolName: "", // Will be filled by the SDK
-      result: content,
-    };
-  });
-
-  return {
-    role: "tool",
-    content: toolResults,
-  };
+  return ctx.messages;
 }
 
 // =============================================================================
