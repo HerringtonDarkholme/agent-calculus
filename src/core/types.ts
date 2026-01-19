@@ -179,8 +179,7 @@ export interface Tool<TParams = unknown, TResult = unknown> {
  * A tool with any parameter and result types.
  * Use this for arrays of mixed tools.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyTool = Tool<any, any>;
+export type AnyTool = Tool<any, unknown>;
 
 /**
  * Result of tool execution.
