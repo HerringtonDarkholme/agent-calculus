@@ -1,6 +1,6 @@
-import type { CoreMessage, ToolResultPart } from "ai";
+import type { CoreMessage } from "ai";
 import type { Context, Entity, LoadedEntity, Verbosity } from "./types.js";
-import { estimateEntityTokens, getEntityContent } from "./entity.js";
+import { estimateEntityTokens } from "./entity.js";
 
 // =============================================================================
 // Context Implementation

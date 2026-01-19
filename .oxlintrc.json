@@ -1,0 +1,9 @@
+{
+  "$schema": "https://oxc.rs/schemas/oxlint-v0.json",
+  "env": {
+    "node": true
+  },
+  "rules": {
+    "eslint/no-unused-vars": "warn"
+  }
+}

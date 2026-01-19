@@ -8,7 +8,7 @@ import type {
   World,
 } from "./types.js";
 import { appendEntity, getUtilization, updateVerbosity } from "./context.js";
-import { createEntity, createToolResult, estimateEntityTokens } from "./entity.js";
+import { createToolResult } from "./entity.js";
 
 // =============================================================================
 // Harness Configuration

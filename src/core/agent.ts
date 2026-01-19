@@ -8,13 +8,12 @@ import type {
   ToolCallAction,
   World,
 } from "./types.js";
-import { createContext, appendEntity, contextToMessages } from "./context.js";
+import { createContext, appendEntity } from "./context.js";
 import { createHarness } from "./harness.js";
 import { createWorld } from "./world.js";
 import {
   createSystemPrompt,
   createUserInput,
-  createAssistantMessage,
   createEntity,
 } from "./entity.js";
 import { invokeLLM, type LLMConfig } from "../llm/provider.js";
