@@ -17,18 +17,20 @@ import { BuiltInEntityTypes } from "./types.js";
  * Options for creating an entity.
  */
 export interface CreateEntityOptions {
-  /** Full content (required) */
-  content: string;
+  /** Entity content - static object or dynamic function */
+  content:
+    | EntityContent
+    | (() => EntityContent)
+    | (() => Promise<EntityContent>)
+    | string; // Allow string shorthand for { full: string }
   /** Entity type */
   type: EntityType;
-  /** Summary content (optional) */
+  /** Summary content (for string shorthand) */
   summary?: string;
-  /** Digest content (optional) */
+  /** Digest content (for string shorthand) */
   digest?: string;
   /** Loading strategy (default: dynamic) */
   loading?: LoadingStrategy;
-  /** Whether content is static (default: based on type) */
-  static?: boolean;
   /** Priority for loading (default: 0) */
   priority?: number;
   /** Role for message conversion */
@@ -52,22 +54,30 @@ export function createEntity(options: CreateEntityOptions): Entity {
     id = randomUUID(),
   } = options;
 
-  // Determine if static based on type if not explicitly provided
-  const isStatic = options.static ?? isStaticType(type);
-
   // Determine role based on type if not provided
   const entityRole = role ?? getRoleForType(type);
 
-  const entityContent: EntityContent = {
-    full: content,
-    summary,
-    digest,
-  };
+  // Handle content - can be string, EntityContent, or function
+  let entityContent: EntityContent | (() => EntityContent) | (() => Promise<EntityContent>);
+
+  if (typeof content === "string") {
+    // String shorthand: convert to EntityContent object
+    entityContent = {
+      full: content,
+      summary,
+      digest,
+    };
+  } else if (typeof content === "function") {
+    // Function: store as is (dynamic content)
+    entityContent = content;
+  } else {
+    // EntityContent object: use as is (static content)
+    entityContent = content;
+  }
 
   const metadata: EntityMetadata = {
     type,
     loading,
-    static: isStatic,
     priority,
     role: entityRole,
     createdAt: Date.now(),
@@ -78,28 +88,6 @@ export function createEntity(options: CreateEntityOptions): Entity {
     content: entityContent,
     metadata,
   };
-}
-
-/**
- * Determine if an entity type is static by default.
- * For unknown types, defaults to false (dynamic).
- */
-function isStaticType(type: EntityType): boolean {
-  switch (type) {
-    case BuiltInEntityTypes.SYSTEM_PROMPT:
-    case BuiltInEntityTypes.TOOL_DESCRIPTION:
-    case BuiltInEntityTypes.SKILL:
-      return true;
-    case BuiltInEntityTypes.MEMORY:
-    case BuiltInEntityTypes.USER_INPUT:
-    case BuiltInEntityTypes.TOOL_RESULT:
-    case BuiltInEntityTypes.ASSISTANT_MESSAGE:
-    case BuiltInEntityTypes.REASONING:
-      return false;
-    default:
-      // Unknown types default to dynamic (false)
-      return false;
-  }
 }
 
 /**
@@ -128,20 +116,51 @@ function getRoleForType(type: EntityType): "user" | "assistant" | "system" {
 // =============================================================================
 
 /**
+ * Evaluate entity content - if it's a function, call it; otherwise return the EntityContent.
+ * Handles both sync and async functions.
+ */
+async function evaluateEntityContent(
+  entity: Entity
+): Promise<EntityContent> {
+  const content = entity.content;
+
+  if (typeof content === "function") {
+    const result = content();
+    // Handle both sync and async functions
+    return result instanceof Promise ? await result : result;
+  }
+
+  // Static EntityContent object
+  return content;
+}
+
+/**
  * Get entity content at a specific verbosity level.
  * Falls back to more detailed levels if requested level is not available.
+ * Evaluates dynamic content (functions) when accessed.
  */
-export function getEntityContent(entity: Entity, verbosity: Verbosity): string {
+export async function getEntityContent(entity: Entity, verbosity: Verbosity): Promise<string> {
+  // Reference verbosity doesn't need content evaluation
+  if (verbosity === "reference") {
+    return `[Entity: ${entity.id}]`;
+  }
+
+  // Evaluate the entity content (static or dynamic)
+  const entityContent = await evaluateEntityContent(entity);
+
   switch (verbosity) {
-    case "reference":
-      return `[Entity: ${entity.id}]`;
-    case "digest":
-      return entity.content.digest ?? entity.content.summary ?? entity.content.full;
-    case "summary":
-      return entity.content.summary ?? entity.content.full;
+    case "digest": {
+      if (entityContent.digest) return entityContent.digest;
+      if (entityContent.summary) return entityContent.summary;
+      return entityContent.full;
+    }
+    case "summary": {
+      if (entityContent.summary) return entityContent.summary;
+      return entityContent.full;
+    }
     case "full":
     default:
-      return entity.content.full;
+      return entityContent.full;
   }
 }
 
@@ -155,9 +174,10 @@ export function estimateTokens(content: string): number {
 
 /**
  * Estimate tokens for an entity at a given verbosity.
+ * Evaluates dynamic content to get the actual string for counting.
  */
-export function estimateEntityTokens(entity: Entity, verbosity: Verbosity): number {
-  const content = getEntityContent(entity, verbosity);
+export async function estimateEntityTokens(entity: Entity, verbosity: Verbosity): Promise<number> {
+  const content = await getEntityContent(entity, verbosity);
   return estimateTokens(content);
 }
 

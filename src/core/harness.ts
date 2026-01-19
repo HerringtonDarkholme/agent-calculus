@@ -68,11 +68,11 @@ export function createHarness(config?: HarnessConfig): Harness {
      * @param availableEntities - Pool of available entities
      * @returns Updated context
      */
-    load(
+    async load(
       ctx: Context,
       newEntity: Entity | null,
       availableEntities: Entity[]
-    ): Context {
+    ): Promise<Context> {
       log("Loading entities into context");
       log(`  Current utilization: ${(getUtilization(ctx) * 100).toFixed(1)}%`);
 
@@ -81,7 +81,7 @@ export function createHarness(config?: HarnessConfig): Harness {
       // Step 1: Check if we need to compress existing entities
       if (getUtilization(updatedCtx) > compressionThreshold) {
         log("  Context utilization high, compressing old entities");
-        updatedCtx = compressOldEntities(updatedCtx);
+        updatedCtx = await compressOldEntities(updatedCtx);
       }
 
       // Step 2: Load preloaded entities that aren't already in context
@@ -92,7 +92,7 @@ export function createHarness(config?: HarnessConfig): Harness {
           );
           if (!alreadyLoaded) {
             log(`  Loading preloaded entity: ${entity.metadata.type}`);
-            updatedCtx = appendEntity(updatedCtx, entity, defaultVerbosity);
+            updatedCtx = await appendEntity(updatedCtx, entity, defaultVerbosity);
           }
         }
       }
@@ -104,13 +104,17 @@ export function createHarness(config?: HarnessConfig): Harness {
         // Choose verbosity based on context utilization
         let verbosity = defaultVerbosity;
         if (getUtilization(updatedCtx) > compressionThreshold) {
-          // Use summary if available and context is getting full
-          if (newEntity.content.summary) {
+          // Evaluate entity content to check if summary is available
+          const entityContent = typeof newEntity.content === "function"
+            ? await newEntity.content()
+            : newEntity.content;
+
+          if (entityContent.summary) {
             verbosity = "summary";
           }
         }
 
-        updatedCtx = appendEntity(updatedCtx, newEntity, verbosity);
+        updatedCtx = await appendEntity(updatedCtx, newEntity, verbosity);
       }
 
       // Step 4: Load dynamically discovered entities based on relevance
@@ -212,7 +216,7 @@ export function createHarness(config?: HarnessConfig): Harness {
  * 1. Find tool_result entities older than the last 3
  * 2. Reduce their verbosity to summary or digest
  */
-function compressOldEntities(ctx: Context): Context {
+async function compressOldEntities(ctx: Context): Promise<Context> {
   let updatedCtx = ctx;
 
   // Get tool result entities
@@ -224,10 +228,15 @@ function compressOldEntities(ctx: Context): Context {
   const toCompress = toolResults.slice(0, -3);
 
   for (const { entity, verbosity } of toCompress) {
-    if (verbosity === "full" && entity.content.summary) {
-      updatedCtx = updateVerbosity(updatedCtx, entity.id, "summary");
-    } else if (verbosity === "summary" && entity.content.digest) {
-      updatedCtx = updateVerbosity(updatedCtx, entity.id, "digest");
+    // Evaluate entity content to check available verbosity levels
+    const entityContent = typeof entity.content === "function"
+      ? await entity.content()
+      : entity.content;
+
+    if (verbosity === "full" && entityContent.summary) {
+      updatedCtx = await updateVerbosity(updatedCtx, entity.id, "summary");
+    } else if (verbosity === "summary" && entityContent.digest) {
+      updatedCtx = await updateVerbosity(updatedCtx, entity.id, "digest");
     }
   }
 

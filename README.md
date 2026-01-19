@@ -15,7 +15,7 @@ pnpm add agent-calculus
 ```typescript
 import { createAgent, fileTools } from "agent-calculus";
 
-const agent = createAgent({
+const agent = await createAgent({
   systemPrompt: "You are a helpful assistant.",
   workingDirectory: process.cwd(),
   maxTokens: 128000,
@@ -83,18 +83,63 @@ const taskEntity = createEntity({
   content: "Implement feature X",
   type: "task",
   loading: "preloaded",
-  static: false,
-  metadata: {
-    type: "task",
-    loading: "preloaded",
-    static: false,
-    priority: 50,
-    discovery: {
-      keywords: ["task", "todo", "implement"],
-    },
-  },
+  priority: 50,
 });
 ```
+
+## Static vs Dynamic Content
+
+Entity content can be **static** (EntityContent object) or **dynamic** (function returning EntityContent):
+
+```typescript
+import { createEntity, BuiltInEntityTypes } from "agent-calculus";
+
+// Static content - string shorthand (converted to EntityContent internally)
+const staticEntity = createEntity({
+  content: "This is static content",
+  type: "static_data",
+});
+
+// Static content - explicit EntityContent object
+const staticEntityExplicit = createEntity({
+  content: {
+    full: "Full content here",
+    summary: "Brief summary",
+    digest: "Tiny digest",
+  },
+  type: "static_data",
+});
+
+// Dynamic content - function returning EntityContent, computed when accessed
+const dynamicEntity = createEntity({
+  content: () => ({
+    full: `Current time: ${new Date().toISOString()}`,
+    summary: "Current timestamp",
+  }),
+  type: "dynamic_data",
+});
+
+// Dynamic memory that reflects conversation state
+let conversationTurns = 0;
+const memoryEntity = createEntity({
+  content: () => ({
+    full: `Conversation has ${conversationTurns} turns`,
+    summary: `${conversationTurns} turns`,
+  }),
+  type: BuiltInEntityTypes.MEMORY,
+  loading: "preloaded",
+});
+
+// Each time this entity is loaded, it computes fresh content
+conversationTurns++;
+// Next load will show "Conversation has 1 turns"
+```
+
+**Use cases for dynamic content:**
+- **Memory** that summarizes recent conversation
+- **Time-based** information (timestamps, dates)
+- **Computed summaries** of other data structures
+- **Contextual information** that changes during execution
 
 ## Built-in Entity Types
 

@@ -71,8 +71,6 @@ export interface EntityMetadata {
   type: EntityType;
   /** When this entity should be loaded */
   loading: LoadingStrategy;
-  /** Whether content changes during execution */
-  static: boolean;
   /** Loading priority (higher = loaded first) */
   priority?: number;
   /** Discovery configuration */
@@ -85,6 +83,7 @@ export interface EntityMetadata {
 
 /**
  * Content at different verbosity levels.
+ * All fields are static strings.
  */
 export interface EntityContent {
   /** Complete content */
@@ -98,12 +97,18 @@ export interface EntityContent {
 /**
  * Entity: The fundamental unit of information in Agent Calculus.
  * Everything that can be loaded into an LLM's context is an entity.
+ *
+ * Content can be:
+ * - Static: An EntityContent object (never changes)
+ * - Dynamic: A function that computes EntityContent when accessed
+ *
+ * This naturally embodies the static/dynamic distinction.
  */
 export interface Entity {
   /** Unique identifier */
   id: string;
-  /** Content at different verbosity levels */
-  content: EntityContent;
+  /** Content - static object or dynamic function */
+  content: EntityContent | (() => EntityContent) | (() => Promise<EntityContent>);
   /** Entity metadata */
   metadata: EntityMetadata;
 }
@@ -258,7 +263,7 @@ export interface Harness {
    * @param availableEntities - Pool of available entities
    * @returns Updated context
    */
-  load(ctx: Context, newEntity: Entity | null, availableEntities: Entity[]): Context;
+  load(ctx: Context, newEntity: Entity | null, availableEntities: Entity[]): Promise<Context>;
 
   /**
    * Execute an action in the world.

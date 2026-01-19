@@ -36,7 +36,7 @@ async function main() {
   console.log();
 
   // Create agent
-  const agent = createAgent({
+  const agent = await createAgent({
     systemPrompt: SYSTEM_PROMPT,
     workingDirectory,
     maxTokens: 128000,
@@ -69,7 +69,7 @@ async function main() {
       }
 
       if (trimmed === "reset") {
-        agent.reset();
+        await agent.reset();
         console.log("Context reset.\n");
         prompt();
         return;

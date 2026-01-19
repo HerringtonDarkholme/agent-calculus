@@ -22,12 +22,12 @@ export function createContext(maxTokens: number = 128000): Context {
  * Append an entity to context.
  * Returns a new context (immutable).
  */
-export function appendEntity(
+export async function appendEntity(
   ctx: Context,
   entity: Entity,
   verbosity: Verbosity = "full"
-): Context {
-  const tokens = estimateEntityTokens(entity, verbosity);
+): Promise<Context> {
+  const tokens = await estimateEntityTokens(entity, verbosity);
 
   const loadedEntity: LoadedEntity = {
     entity,
@@ -73,18 +73,20 @@ export function removeEntity(ctx: Context, entityId: string): Context {
 /**
  * Update verbosity of an entity in context.
  */
-export function updateVerbosity(
+export async function updateVerbosity(
   ctx: Context,
   entityId: string,
   verbosity: Verbosity
-): Context {
-  const entities = ctx.entities.map((e) => {
-    if (e.entity.id === entityId) {
-      const tokens = estimateEntityTokens(e.entity, verbosity);
-      return { ...e, verbosity, tokens };
-    }
-    return e;
-  });
+): Promise<Context> {
+  const entities = await Promise.all(
+    ctx.entities.map(async (e) => {
+      if (e.entity.id === entityId) {
+        const tokens = await estimateEntityTokens(e.entity, verbosity);
+        return { ...e, verbosity, tokens };
+      }
+      return e;
+    })
+  );
 
   const currentTokens = entities.reduce((sum, e) => sum + (e.tokens ?? 0), 0);
 
