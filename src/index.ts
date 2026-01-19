@@ -15,6 +15,7 @@ export type {
   // Entity types
   Entity,
   EntityType,
+  BuiltInEntityType,
   EntityMetadata,
   EntityContent,
   EntityDiscovery,
@@ -46,6 +47,9 @@ export type {
   AgentConfig,
   ChatResult,
 } from "./core/types.js";
+
+// Constants
+export { BuiltInEntityTypes } from "./core/types.js";
 
 // =============================================================================
 // Core Implementations

@@ -8,6 +8,7 @@ import type {
   ToolCallAction,
   World,
 } from "./types.js";
+import { BuiltInEntityTypes } from "./types.js";
 import { createContext, appendEntity } from "./context.js";
 import { createHarness } from "./harness.js";
 import { createWorld } from "./world.js";
@@ -61,7 +62,7 @@ export class Agent {
     const toolEntities = this.tools.map((tool) =>
       createEntity({
         content: `Tool: ${tool.name}\nDescription: ${tool.description}`,
-        type: "tool_description",
+        type: BuiltInEntityTypes.TOOL_DESCRIPTION,
         loading: "preloaded",
         summary: `${tool.name}: ${tool.description.slice(0, 50)}...`,
       })

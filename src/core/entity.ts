@@ -7,6 +7,7 @@ import type {
   LoadingStrategy,
   Verbosity,
 } from "./types.js";
+import { BuiltInEntityTypes } from "./types.js";
 
 // =============================================================================
 // Entity Creation
@@ -81,40 +82,44 @@ export function createEntity(options: CreateEntityOptions): Entity {
 
 /**
  * Determine if an entity type is static by default.
+ * For unknown types, defaults to false (dynamic).
  */
 function isStaticType(type: EntityType): boolean {
   switch (type) {
-    case "system_prompt":
-    case "tool_description":
-    case "skill":
+    case BuiltInEntityTypes.SYSTEM_PROMPT:
+    case BuiltInEntityTypes.TOOL_DESCRIPTION:
+    case BuiltInEntityTypes.SKILL:
       return true;
-    case "memory":
-    case "user_input":
-    case "tool_result":
-    case "assistant_message":
-    case "reasoning":
+    case BuiltInEntityTypes.MEMORY:
+    case BuiltInEntityTypes.USER_INPUT:
+    case BuiltInEntityTypes.TOOL_RESULT:
+    case BuiltInEntityTypes.ASSISTANT_MESSAGE:
+    case BuiltInEntityTypes.REASONING:
       return false;
     default:
+      // Unknown types default to dynamic (false)
       return false;
   }
 }
 
 /**
  * Get the message role for an entity type.
+ * For unknown types, defaults to "user".
  */
 function getRoleForType(type: EntityType): "user" | "assistant" | "system" {
   switch (type) {
-    case "system_prompt":
+    case BuiltInEntityTypes.SYSTEM_PROMPT:
       return "system";
-    case "user_input":
+    case BuiltInEntityTypes.USER_INPUT:
       return "user";
-    case "assistant_message":
-    case "reasoning":
+    case BuiltInEntityTypes.ASSISTANT_MESSAGE:
+    case BuiltInEntityTypes.REASONING:
       return "assistant";
-    case "tool_result":
+    case BuiltInEntityTypes.TOOL_RESULT:
       return "user"; // Tool results are sent as tool messages, but entity role is user
     default:
-      return "system";
+      // Unknown types default to "user"
+      return "user";
   }
 }
 
@@ -166,7 +171,7 @@ export function estimateEntityTokens(entity: Entity, verbosity: Verbosity): numb
 export function createSystemPrompt(content: string): Entity {
   return createEntity({
     content,
-    type: "system_prompt",
+    type: BuiltInEntityTypes.SYSTEM_PROMPT,
     loading: "preloaded",
     priority: 100,
     role: "system",
@@ -179,7 +184,7 @@ export function createSystemPrompt(content: string): Entity {
 export function createUserInput(content: string): Entity {
   return createEntity({
     content,
-    type: "user_input",
+    type: BuiltInEntityTypes.USER_INPUT,
     loading: "dynamic",
     role: "user",
   });
@@ -191,7 +196,7 @@ export function createUserInput(content: string): Entity {
 export function createAssistantMessage(content: string): Entity {
   return createEntity({
     content,
-    type: "assistant_message",
+    type: BuiltInEntityTypes.ASSISTANT_MESSAGE,
     loading: "dynamic",
     role: "assistant",
   });
@@ -210,7 +215,7 @@ export function createToolResult(
 
   return createEntity({
     content,
-    type: "tool_result",
+    type: BuiltInEntityTypes.TOOL_RESULT,
     loading: "dynamic",
     summary: options?.summary,
     digest: options?.digest,
@@ -234,7 +239,7 @@ Parameters: ${JSON.stringify(parameters, null, 2)}`;
 
   return createEntity({
     content: fullContent,
-    type: "tool_description",
+    type: BuiltInEntityTypes.TOOL_DESCRIPTION,
     loading: "preloaded",
     summary: summaryContent,
     priority: 50,

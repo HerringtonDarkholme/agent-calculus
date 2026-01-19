@@ -20,17 +20,27 @@ export type Verbosity = "full" | "summary" | "digest" | "reference";
 // =============================================================================
 
 /**
- * Types of entities that can be loaded into context.
+ * Entity type can be any string - this is an open set.
+ * Users can define their own entity types.
  */
-export type EntityType =
-  | "system_prompt"
-  | "tool_description"
-  | "skill"
-  | "memory"
-  | "user_input"
-  | "tool_result"
-  | "assistant_message"
-  | "reasoning";
+export type EntityType = string;
+
+/**
+ * Built-in entity types provided by the framework.
+ * Users can use these or define their own.
+ */
+export const BuiltInEntityTypes = {
+  SYSTEM_PROMPT: "system_prompt",
+  TOOL_DESCRIPTION: "tool_description",
+  SKILL: "skill",
+  MEMORY: "memory",
+  USER_INPUT: "user_input",
+  TOOL_RESULT: "tool_result",
+  ASSISTANT_MESSAGE: "assistant_message",
+  REASONING: "reasoning",
+} as const;
+
+export type BuiltInEntityType = (typeof BuiltInEntityTypes)[keyof typeof BuiltInEntityTypes];
 
 /**
  * Loading strategy for entities.

@@ -7,6 +7,7 @@ import type {
   Verbosity,
   World,
 } from "./types.js";
+import { BuiltInEntityTypes } from "./types.js";
 import { appendEntity, getUtilization, updateVerbosity } from "./context.js";
 import { createToolResult } from "./entity.js";
 
@@ -217,7 +218,7 @@ function compressOldEntities(ctx: Context): Context {
   // Get tool result entities
   const toolResults = ctx.entities
     .map((e, i) => ({ ...e, index: i }))
-    .filter((e) => e.entity.metadata.type === "tool_result");
+    .filter((e) => e.entity.metadata.type === BuiltInEntityTypes.TOOL_RESULT);
 
   // Keep the last 3 tool results at full verbosity, compress the rest
   const toCompress = toolResults.slice(0, -3);
