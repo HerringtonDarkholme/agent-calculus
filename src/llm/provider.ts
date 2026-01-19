@@ -18,7 +18,7 @@ export interface LLMConfig {
 }
 
 const DEFAULT_CONFIG: Required<LLMConfig> = {
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-4-5-20250929",
   maxTokens: 4096,
   temperature: 0,
 };

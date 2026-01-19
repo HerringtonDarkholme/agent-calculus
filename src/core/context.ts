@@ -123,6 +123,23 @@ export function contextToMessages(ctx: Context): CoreMessage[] {
       currentToolResults = [];
     }
 
+    // Handle assistant messages with tool calls
+    if (entity.metadata.type === "assistant_with_tools" && entity.data?.toolCalls) {
+      messages.push({
+        role: "assistant",
+        content: [
+          { type: "text", text: content },
+          ...entity.data.toolCalls.map((tc) => ({
+            type: "tool-call" as const,
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName,
+            args: tc.args,
+          })),
+        ],
+      });
+      continue;
+    }
+
     // Handle based on role
     switch (role) {
       case "system":

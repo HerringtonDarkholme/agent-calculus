@@ -92,6 +92,7 @@ function isStaticType(type: EntityType): boolean {
     case "user_input":
     case "tool_result":
     case "assistant_message":
+    case "assistant_with_tools":
     case "reasoning":
       return false;
     default:
@@ -109,6 +110,7 @@ function getRoleForType(type: EntityType): "user" | "assistant" | "system" {
     case "user_input":
       return "user";
     case "assistant_message":
+    case "assistant_with_tools":
     case "reasoning":
       return "assistant";
     case "tool_result":

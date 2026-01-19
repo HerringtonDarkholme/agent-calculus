@@ -44,7 +44,7 @@ export class Agent {
   constructor(config: AgentConfig & { debug?: boolean }) {
     this.debug = config.debug ?? false;
     this.tools = config.tools;
-    this.llmConfig = { model: config.model };
+    this.llmConfig = config.model ? { model: config.model } : {};
 
     // Initialize context
     this.ctx = createContext(config.maxTokens);
@@ -117,22 +117,38 @@ export class Agent {
       this.log(`LLM text: ${llmResponse.text.slice(0, 100)}...`);
       this.log(`Tool calls: ${llmResponse.toolCalls.length}`);
 
-      // If there's text response, add it to context
-      if (llmResponse.text) {
-        const assistantEntity = createAssistantMessage(llmResponse.text);
-        this.ctx = appendEntity(this.ctx, assistantEntity);
-      }
-
-      // If no tool calls, we're done - return the response
+      // If no tool calls, just a text response - we're done
       if (llmResponse.toolCalls.length === 0) {
         this.log("No tool calls, returning response");
+        // Add the text response to context
+        if (llmResponse.text) {
+          const assistantEntity = createAssistantMessage(llmResponse.text);
+          this.ctx = appendEntity(this.ctx, assistantEntity);
+        }
         return {
           response: llmResponse.text,
           toolCalls: toolCallsMade,
         };
       }
 
-      // EXECUTION PHASE - process each tool call
+      // If there are tool calls, create an assistant_with_tools entity
+      const assistantWithToolsEntity = createEntity({
+        content: llmResponse.text || "Calling tools...",
+        type: "assistant_with_tools",
+        role: "assistant",
+      });
+      // Add the tool calls as structured data
+      assistantWithToolsEntity.data = {
+        toolCalls: llmResponse.toolCalls.map((tc) => ({
+          toolCallId: tc.toolCallId,
+          toolName: tc.toolName,
+          args: tc.args,
+        })),
+      };
+      this.ctx = appendEntity(this.ctx, assistantWithToolsEntity);
+
+      // EXECUTION PHASE - process all tool calls and collect results
+      const toolResults: Entity[] = [];
       for (const toolCall of llmResponse.toolCalls) {
         this.log(`Executing tool: ${toolCall.toolName}`);
 
@@ -143,21 +159,12 @@ export class Agent {
           toolCallId: toolCall.toolCallId,
         };
 
-        // Add tool call to assistant message (for context)
-        const toolCallEntity = createEntity({
-          content: `Calling tool: ${toolCall.toolName}(${JSON.stringify(toolCall.args)})`,
-          type: "assistant_message",
-          role: "assistant",
-        });
-        this.ctx = appendEntity(this.ctx, toolCallEntity);
-
         // Execute the tool
         const result = await this.harness.execute(action, this.world, this.tools);
 
-        // Update world and add result to context
+        // Update world and collect result
         this.world = result.world;
-        entity = result.entity;
-        this.ctx = appendEntity(this.ctx, result.entity);
+        toolResults.push(result.entity);
 
         // Track the tool call
         toolCallsMade.push({
@@ -168,6 +175,14 @@ export class Agent {
 
         this.log(`Tool result: ${result.entity.content.full.slice(0, 100)}...`);
       }
+
+      // Add all tool results to context at once
+      for (const resultEntity of toolResults) {
+        this.ctx = appendEntity(this.ctx, resultEntity);
+      }
+
+      // Clear entity so load doesn't try to add it again
+      entity = null;
 
       // Continue loop to process tool results
     }
