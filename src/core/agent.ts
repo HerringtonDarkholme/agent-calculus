@@ -83,23 +83,25 @@ export class Agent {
    * Must be called before chat().
    */
   async initialize(): Promise<void> {
-    this.ctx = await this.harness.load(this.ctx, null, this.availableEntities);
+    this.ctx = await this.harness.load(this.ctx, [], this.availableEntities);
     this.log("Agent context initialized");
   }
 
   /**
-   * Process a single user turn.
+   * Process entities through the agent loop.
    *
    * This implements the core agent loop:
    * while (true):
-   *   1. LOAD: Pack entities into context
+   *   1. LOAD: Pack entities into context (harness filters relevant ones)
    *   2. REASON: LLM processes and generates actions
    *   3. EXECUTE: Run tools in world
    *   4. If no tool call, return response
+   *
+   * @param entities - Entities to process (e.g., user input, slash command results, etc.)
    */
-  async chat(userInput: string): Promise<ChatResult> {
+  async chat(entities: Entity[]): Promise<ChatResult> {
     this.log(`\n--- New turn ---`);
-    this.log(`User: ${userInput}`);
+    this.log(`Processing ${entities.length} entities`);
 
     const result = await runAgentLoop({
       context: this.ctx,
@@ -108,7 +110,7 @@ export class Agent {
       tools: this.tools,
       availableEntities: this.availableEntities,
       llmConfig: this.llmConfig,
-      userInput,
+      newEntities: entities,
       debug: this.debug,
     });
 
@@ -122,14 +124,6 @@ export class Agent {
     };
   }
 
-  /**
-   * Append an entity to the agent's context.
-   * Useful for adding external information (like slash command results).
-   */
-  async appendEntity(entity: Entity): Promise<void> {
-    this.ctx = await appendEntity(this.ctx, entity);
-    this.log(`Entity appended: ${entity.metadata.type}`);
-  }
 
   /**
    * Get current context for inspection.
@@ -150,7 +144,7 @@ export class Agent {
    */
   async reset(): Promise<void> {
     this.ctx = createContext(this.ctx.maxTokens);
-    this.ctx = await this.harness.load(this.ctx, null, this.availableEntities);
+    this.ctx = await this.harness.load(this.ctx, [], this.availableEntities);
     this.log("Agent context reset");
   }
 }

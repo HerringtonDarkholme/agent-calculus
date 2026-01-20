@@ -3,7 +3,7 @@ import type { AnyTool, World, ToolExecutionResult, Entity } from "../../core/typ
 import { runAgentLoop } from "../../core/agent-loop.js";
 import { createContext } from "../../core/context.js";
 import { createHarness } from "../../core/harness.js";
-import { createSystemPrompt } from "../../core/entity.js";
+import { createSystemPrompt, createEntity } from "../../core/entity.js";
 
 // =============================================================================
 // Subagent Tool
@@ -132,13 +132,22 @@ export function createSubagentTool(options: SubagentToolOptions): AnyTool {
         // Load preloaded entities into subagent context
         let initializedContext = await subagentHarness.load(
           subagentContext,
-          null,
+          [],
           subagentEntities
         );
 
         if (debug) {
           console.log(`[Subagent] Context initialized, running agent loop`);
         }
+
+        // Create user input entity for the task
+        const taskEntity = createEntity({
+          content: task,
+          type: "user_input",
+          loading: "dynamic",
+          summary: task.slice(0, 50),
+          role: "user",
+        });
 
         // Run the agent loop (reusing the same loop as the main agent!)
         const result = await runAgentLoop({
@@ -148,7 +157,7 @@ export function createSubagentTool(options: SubagentToolOptions): AnyTool {
           tools: availableTools,
           availableEntities: subagentEntities,
           llmConfig: {}, // Use default model
-          userInput: task,
+          newEntities: [taskEntity],
           maxTurns: max_turns, // Enforce turn limit
           debug,
         });

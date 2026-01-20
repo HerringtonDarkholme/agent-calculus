@@ -9,7 +9,7 @@ import type {
 } from "./types.js";
 import { BuiltInEntityTypes } from "./types.js";
 import { appendEntity, getUtilization, updateVerbosity } from "./context.js";
-import { createToolResult } from "./entity.js";
+import { createToolResult, getEntityContent } from "./entity.js";
 
 // =============================================================================
 // Harness Configuration
@@ -64,17 +64,18 @@ export function createHarness(config?: HarnessConfig): Harness {
      * 4. Evict: Remove/compress old entities if context is full
      *
      * @param ctx - Current context
-     * @param newEntity - New entity to incorporate (or null)
-     * @param availableEntities - Pool of available entities
+     * @param newEntities - New entities to incorporate (e.g., user input, slash command results)
+     * @param availableEntities - Pool of available entities (tools, skills, etc.)
      * @returns Updated context
      */
     async load(
       ctx: Context,
-      newEntity: Entity | null,
+      newEntities: Entity[],
       availableEntities: Entity[]
     ): Promise<Context> {
       log("Loading entities into context");
       log(`  Current utilization: ${(getUtilization(ctx) * 100).toFixed(1)}%`);
+      log(`  New entities: ${newEntities.length}`);
 
       let updatedCtx = ctx;
 
@@ -97,8 +98,8 @@ export function createHarness(config?: HarnessConfig): Harness {
         }
       }
 
-      // Step 3: Add the new entity if provided
-      if (newEntity) {
+      // Step 3: Add new entities (with filtering)
+      for (const newEntity of newEntities) {
         log(`  Adding new entity: ${newEntity.metadata.type}`);
 
         // Choose verbosity based on context utilization
@@ -114,7 +115,21 @@ export function createHarness(config?: HarnessConfig): Harness {
           }
         }
 
+        // Add to entities
         updatedCtx = await appendEntity(updatedCtx, newEntity, verbosity);
+
+        // If entity has a role, also add to messages
+        if (newEntity.metadata.role) {
+          const content = await getEntityContent(newEntity, verbosity);
+          updatedCtx = {
+            ...updatedCtx,
+            messages: [
+              ...updatedCtx.messages,
+              { role: newEntity.metadata.role, content },
+            ],
+          };
+          log(`  Added message: ${newEntity.metadata.role} - ${content.slice(0, 50)}...`);
+        }
       }
 
       // Step 4: Load dynamically discovered entities based on relevance

@@ -259,11 +259,11 @@ export interface Harness {
    * Load entities into context.
    *
    * @param ctx - Current context
-   * @param newEntity - New entity to incorporate
-   * @param availableEntities - Pool of available entities
+   * @param newEntities - New entities to incorporate (e.g., user input, slash command results)
+   * @param availableEntities - Pool of available entities (tools, skills, etc.)
    * @returns Updated context
    */
-  load(ctx: Context, newEntity: Entity | null, availableEntities: Entity[]): Promise<Context>;
+  load(ctx: Context, newEntities: Entity[], availableEntities: Entity[]): Promise<Context>;
 
   /**
    * Execute an action in the world.

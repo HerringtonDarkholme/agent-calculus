@@ -13,7 +13,7 @@ pnpm add agent-calculus
 ## Quick Start
 
 ```typescript
-import { createAgent, fileTools } from "agent-calculus";
+import { createAgent, createEntity, fileTools } from "agent-calculus";
 
 const agent = await createAgent({
   systemPrompt: "You are a helpful assistant.",
@@ -22,7 +22,16 @@ const agent = await createAgent({
   tools: fileTools,
 });
 
-const result = await agent.chat("What files are in this directory?");
+// Create user input entity
+const userEntity = createEntity({
+  content: "What files are in this directory?",
+  type: "user_input",
+  loading: "dynamic",
+  role: "user",
+});
+
+// Pass entities to agent
+const result = await agent.chat([userEntity]);
 console.log(result.response);
 ```
 
@@ -307,31 +316,42 @@ async function handleInput(userInput: string): Promise<string> {
       role: "assistant",
     });
 
-    // Append to agent's context (so it knows what happened)
-    agent.appendEntity(commandEntity);
+    // Pass entity to agent (load function filters and adds to context)
+    await agent.chat([commandEntity]);
 
     // Return result directly
     return result.message;
   } else {
-    // Normal input - pass to agent
-    const response = await agent.chat(userInput);
+    // Normal input - create user input entity
+    const userEntity = createEntity({
+      content: userInput,
+      type: "user_input",
+      loading: "dynamic",
+      role: "user",
+    });
+
+    // Pass entity to agent
+    const response = await agent.chat([userEntity]);
     return response.response;
   }
 }
 
 // Usage
-await handleInput("/help");         // Executes command, returns result
-await handleInput("/greet Alice");  // Executes command, returns result
-await handleInput("What is 2+2?");  // Agent processes normally
+await handleInput("/help");         // Executes command, creates entity, passes to agent
+await handleInput("/greet Alice");  // Executes command, creates entity, passes to agent
+await handleInput("What is 2+2?");  // Creates user entity, passes to agent
 ```
 
 **How it works:**
 1. User types input
 2. **Application code** checks if it's a slash command
-3. If yes: execute command, create entity, append to context, return result
-4. If no: pass to agent.chat() for normal processing
+3. If yes: execute command, create entity from result
+4. If no: create user input entity
+5. Pass entity (or entities) to `agent.chat()`
+6. **Harness load function** filters and loads relevant entities into context
+7. Agent loop processes entities
 
-**Key insight:** The agent doesn't know about slash commands. They're handled externally and their results are just entities appended to context.
+**Key insight:** Everything is an entity. The agent doesn't know about slash commands - they're just entities like user input. The harness load function decides what to include in context.
 
 ### Direct Command Execution
 
@@ -474,16 +494,45 @@ This design ensures:
 
 ## CLI
 
-Test the framework interactively:
+The interactive CLI demonstrates all patterns in the framework:
+- **Skills**: code_review, debugging, api_design (use `list_skills` and `load_skill` tools)
+- **Subagents**: spawn_subagent tool for task delegation
+- **Slash Commands**: /help, /stats, /clear, etc. (executed in application code)
+- **File Tools**: read_file, write_file, list_files
+
+Run the CLI:
 
 ```bash
 ANTHROPIC_API_KEY=your-key pnpm cli
 ```
 
-Commands:
-- `context` - Show context utilization stats
-- `reset` - Clear conversation
-- `exit` - Quit
+Built-in commands:
+- `context` - Show context utilization and entity stats
+- `reset` - Clear conversation and reset context
+- `exit` or `quit` - Exit the CLI
+
+Slash commands (handled in application code):
+- `/help` - Show all available slash commands
+- `/stats` - Show agent statistics
+- `/clear` - Clear the terminal screen
+
+Example session:
+```
+[0.3%] > /help
+Available slash commands:
+  /help - Show all available slash commands
+  /stats - Show agent statistics
+  ...
+
+[0.5%] > What skills do you have?
+(Agent will call list_skills tool)
+
+[1.2%] > Load the code_review skill and review this function...
+(Agent will call load_skill, then review using loaded guidelines)
+
+[2.5%] > Spawn a subagent to analyze package.json
+(Agent will call spawn_subagent tool)
+```
 
 ## License
 

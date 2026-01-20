@@ -28,8 +28,8 @@ export interface AgentLoopOptions {
   availableEntities: Entity[];
   /** LLM configuration */
   llmConfig: LLMConfig;
-  /** User input to process */
-  userInput: string;
+  /** New entities to process (e.g., user input, slash command results, etc.) */
+  newEntities: Entity[];
   /** Maximum number of LLM calls (iterations) allowed */
   maxTurns?: number;
   /** Enable debug logging */
@@ -70,7 +70,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     tools,
     availableEntities,
     llmConfig,
-    userInput,
+    newEntities,
     maxTurns,
     debug = false,
   } = options;
@@ -81,7 +81,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     }
   };
 
-  log(`Processing: ${userInput.slice(0, 50)}...`);
+  log(`Processing ${newEntities.length} new entities`);
   if (maxTurns !== undefined) {
     log(`Max turns: ${maxTurns}`);
   }
@@ -91,15 +91,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const toolCallsMade: ChatResult["toolCalls"] = [];
   let turnCount = 0;
 
-  // Add user message to context
-  ctx = {
-    ...ctx,
-    messages: [...ctx.messages, { role: "user", content: userInput }],
-  };
-
-  // Create user input entity (for tracking/memory)
-  const userEntity = createUserInput(userInput);
-  ctx = await harness.load(ctx, userEntity, availableEntities);
+  // Load new entities (harness will filter and add to context + messages)
+  ctx = await harness.load(ctx, newEntities, availableEntities);
 
   // Agent loop: process until we get a response (no tool call)
   while (true) {
