@@ -246,6 +246,66 @@ await agent.chat("Load the code_review skill and review this code...");
 
 Skills are loaded as tool results, making their instructions immediately available in the LLM's context.
 
+## Subagent Pattern
+
+Subagents allow an agent to spawn independent sub-agents to handle specific tasks. This enables:
+- **Task decomposition**: Break complex tasks into focused subtasks
+- **Parallel processing**: Multiple subagents can work on different aspects
+- **Isolation**: Each subagent has its own context and focus
+- **Recursion control**: Configurable depth limits prevent infinite recursion
+
+### Creating a Subagent Tool
+
+```typescript
+import { createAgent, createSubagentTool, fileTools } from "agent-calculus";
+
+// Create the subagent tool
+const subagentTool = createSubagentTool({
+  defaultSystemPrompt: "You are a focused assistant. Complete the task concisely.",
+  parentMaxTokens: 128000, // Parent's max tokens
+  availableTools: fileTools, // Tools available to subagents
+  maxDepth: 3, // Maximum nesting depth (default: 3)
+  debug: false,
+});
+
+// Add to your agent
+const agent = await createAgent({
+  systemPrompt: "You can delegate tasks to subagents using spawn_subagent.",
+  workingDirectory: process.cwd(),
+  maxTokens: 128000,
+  tools: [...fileTools, subagentTool],
+});
+```
+
+### Using Subagents
+
+The `spawn_subagent` tool accepts:
+- **`task`** (required): The task for the subagent to complete
+- **`system_prompt`** (optional): Custom system prompt for specialized subagents
+- **`max_turns`** (optional): Maximum LLM calls the subagent can make (default: 10)
+
+```typescript
+// The agent can spawn subagents for delegation
+await agent.chat(
+  "Please spawn a subagent to analyze the package.json file and " +
+  "another to analyze README.md, then give me a combined summary."
+);
+// Agent will spawn 2 subagents and combine their results
+
+await agent.chat(
+  "Spawn a subagent with TypeScript expertise to review this code..."
+);
+// Agent will spawn a subagent with a custom system prompt
+```
+
+### Key Features
+
+- **Context reduction**: Subagents get 50% of parent's maxTokens
+- **Recursion protection**: Maximum depth limit prevents infinite loops
+- **Tool inheritance**: Subagents have access to the same tools
+- **Turn limiting**: Prevents runaway subagent execution
+- **Error handling**: Graceful failure with informative error messages
+
 ## Advanced: Custom Harness
 
 You can customize the load function to implement custom entity selection:

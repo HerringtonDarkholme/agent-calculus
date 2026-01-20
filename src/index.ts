@@ -108,7 +108,10 @@ export {
   listFilesTool,
   fileTools,
   createSkillTools,
+  createSubagentTool,
 } from "./patterns/tools/index.js";
+
+export type { SubagentToolOptions } from "./patterns/tools/index.js";
 
 // =============================================================================
 // Skills
