@@ -246,6 +246,119 @@ await agent.chat("Load the code_review skill and review this code...");
 
 Skills are loaded as tool results, making their instructions immediately available in the LLM's context.
 
+## Slash Commands
+
+Slash commands are entities that represent user shortcuts. They are handled in **application code** (like your CLI), not inside the agent. This preserves the Entity abstraction - slash commands are just another kind of entity.
+
+### Creating Slash Commands
+
+```typescript
+import { createSlashCommandRegistry, type SlashCommand } from "agent-calculus";
+
+// Define a custom command
+const greetCommand: SlashCommand = {
+  name: "greet",
+  description: "Greet the user",
+  usage: "/greet [name]",
+  aliases: ["hello", "hi"],
+  async execute(args, world) {
+    const name = args.length > 0 ? args.join(" ") : "there";
+    return {
+      message: `Hello, ${name}!`,
+      success: true,
+    };
+  },
+};
+
+// Create registry and register commands
+const commandRegistry = createSlashCommandRegistry();
+commandRegistry.register(greetCommand);
+
+// Register built-in commands (help, list)
+const builtIn = createBuiltInCommands(commandRegistry);
+commandRegistry.registerMany(builtIn);
+```
+
+### Using Slash Commands with Agent
+
+```typescript
+// Create agent (no special configuration needed)
+const agent = await createAgent({
+  systemPrompt: "You are a helpful assistant.",
+  workingDirectory: process.cwd(),
+  maxTokens: 128000,
+  tools: fileTools,
+});
+
+// Handle user input in your application code
+async function handleInput(userInput: string): Promise<string> {
+  const parsed = commandRegistry.parse(userInput);
+
+  if (parsed) {
+    // It's a slash command - execute it OUTSIDE the agent
+    const result = await commandRegistry.execute(userInput, agent.getWorld());
+
+    // Create entity from command result
+    const commandEntity = createEntity({
+      content: result.message,
+      type: "slash_command_result",
+      loading: "dynamic",
+      summary: `/${parsed.command}`,
+      role: "assistant",
+    });
+
+    // Append to agent's context (so it knows what happened)
+    agent.appendEntity(commandEntity);
+
+    // Return result directly
+    return result.message;
+  } else {
+    // Normal input - pass to agent
+    const response = await agent.chat(userInput);
+    return response.response;
+  }
+}
+
+// Usage
+await handleInput("/help");         // Executes command, returns result
+await handleInput("/greet Alice");  // Executes command, returns result
+await handleInput("What is 2+2?");  // Agent processes normally
+```
+
+**How it works:**
+1. User types input
+2. **Application code** checks if it's a slash command
+3. If yes: execute command, create entity, append to context, return result
+4. If no: pass to agent.chat() for normal processing
+
+**Key insight:** The agent doesn't know about slash commands. They're handled externally and their results are just entities appended to context.
+
+### Direct Command Execution
+
+You can also execute commands directly (useful for CLIs):
+
+```typescript
+// Execute a command directly
+const result = await commandRegistry.execute("/help", world);
+console.log(result.message);
+
+// Parse command strings
+const parsed = commandRegistry.parse("/echo hello world");
+// { command: "echo", args: ["hello", "world"] }
+```
+
+### Key Features
+
+- **Entity abstraction preserved**: Slash commands are just entities, handled in application code
+- **Agent agnostic**: The Agent class has no knowledge of slash commands
+- **Simple syntax**: Commands start with `/` followed by the command name
+- **Arguments**: Commands can accept space-separated arguments
+- **Aliases**: Commands can have multiple names (e.g., `/h`, `/help`, `/?`)
+- **Built-in help**: Automatic `/help` and `/list` commands
+- **Custom commands**: Easy to create domain-specific commands
+- **External execution**: Commands execute in application code, not inside the agent loop
+- **Optional context injection**: Use `agent.appendEntity()` to add command results to context
+
 ## Subagent Pattern
 
 Subagents allow an agent to spawn independent sub-agents to handle specific tasks. This enables:

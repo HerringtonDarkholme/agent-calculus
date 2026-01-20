@@ -8,7 +8,7 @@ import type {
   World,
 } from "./types.js";
 import { BuiltInEntityTypes } from "./types.js";
-import { createContext } from "./context.js";
+import { createContext, appendEntity } from "./context.js";
 import { createHarness } from "./harness.js";
 import { createWorld } from "./world.js";
 import { createSystemPrompt, createEntity } from "./entity.js";
@@ -101,7 +101,6 @@ export class Agent {
     this.log(`\n--- New turn ---`);
     this.log(`User: ${userInput}`);
 
-    // Run the agent loop
     const result = await runAgentLoop({
       context: this.ctx,
       world: this.world,
@@ -121,6 +120,15 @@ export class Agent {
       response: result.response,
       toolCalls: result.toolCalls,
     };
+  }
+
+  /**
+   * Append an entity to the agent's context.
+   * Useful for adding external information (like slash command results).
+   */
+  async appendEntity(entity: Entity): Promise<void> {
+    this.ctx = await appendEntity(this.ctx, entity);
+    this.log(`Entity appended: ${entity.metadata.type}`);
   }
 
   /**
@@ -154,7 +162,9 @@ export class Agent {
 /**
  * Create a new agent with the given configuration.
  */
-export async function createAgent(config: AgentConfig & { debug?: boolean }): Promise<Agent> {
+export async function createAgent(
+  config: AgentConfig & { debug?: boolean }
+): Promise<Agent> {
   const agent = new Agent(config);
   await agent.initialize();
   return agent;

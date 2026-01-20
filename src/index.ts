@@ -127,3 +127,21 @@ export {
   createSkillRegistry,
   SkillRegistry,
 } from "./patterns/skills.js";
+
+// =============================================================================
+// Slash Commands
+// =============================================================================
+
+export type {
+  SlashCommand,
+  SlashCommandResult,
+} from "./patterns/slash-commands.js";
+export {
+  SlashCommandRegistry,
+  createSlashCommandRegistry,
+  createHelpCommand,
+  createListCommand,
+  createBuiltInCommands,
+  createSlashCommandEntity,
+  interceptSlashCommand,
+} from "./patterns/slash-commands.js";
