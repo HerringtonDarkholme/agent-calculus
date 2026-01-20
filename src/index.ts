@@ -92,6 +92,10 @@ export { createHarness, discoverRelevantEntities } from "./core/harness.js";
 // Agent
 export { Agent, createAgent } from "./core/agent.js";
 
+// Agent Loop
+export { runAgentLoop } from "./core/agent-loop.js";
+export type { AgentLoopOptions, AgentLoopResult } from "./core/agent-loop.js";
+
 // =============================================================================
 // LLM Provider
 // =============================================================================

@@ -1,6 +1,9 @@
 import { z } from "zod";
-import type { AnyTool, World, ToolExecutionResult } from "../../core/types.js";
-import { Agent } from "../../core/agent.js";
+import type { AnyTool, World, ToolExecutionResult, Entity } from "../../core/types.js";
+import { runAgentLoop } from "../../core/agent-loop.js";
+import { createContext } from "../../core/context.js";
+import { createHarness } from "../../core/harness.js";
+import { createSystemPrompt } from "../../core/entity.js";
 
 // =============================================================================
 // Subagent Tool
@@ -71,7 +74,7 @@ export function createSubagentTool(options: SubagentToolOptions): AnyTool {
       world: World
     ): Promise<ToolExecutionResult> {
       try {
-        const { task, system_prompt, max_turns: _max_turns = 10 } = params;
+        const { task, system_prompt, max_turns = 10 } = params;
 
         // Check recursion depth
         currentDepth++;
@@ -87,44 +90,71 @@ export function createSubagentTool(options: SubagentToolOptions): AnyTool {
 
         if (debug) {
           console.log(`[Subagent] Spawning at depth ${currentDepth} for task: ${task.slice(0, 50)}...`);
+          console.log(`[Subagent] Max turns: ${max_turns}`);
         }
 
-        // Note: max_turns is accepted but not enforced in current implementation
-        // The agent.chat() method runs until it gets a response (no tool call)
-        // Future enhancement: add turn limit enforcement
-
-        // Create subagent with reduced context size
+        // Create subagent context with reduced size
         const subagentMaxTokens = Math.floor(parentMaxTokens / 2);
         const systemPrompt = system_prompt ?? defaultSystemPrompt;
 
-        // Create the subagent manually to have more control
-        const subagent = new Agent({
-          systemPrompt,
-          workingDirectory: world.workingDirectory,
-          maxTokens: subagentMaxTokens,
+        if (debug) {
+          console.log(`[Subagent] Creating context with maxTokens: ${subagentMaxTokens}`);
+        }
+
+        // Create fresh context for subagent
+        const subagentContext = createContext(subagentMaxTokens);
+
+        // Create harness for subagent
+        const subagentHarness = createHarness({ debug });
+
+        // Create system prompt entity
+        const systemPromptEntity = createSystemPrompt(systemPrompt);
+
+        // Create tool description entities
+        const toolEntities: Entity[] = availableTools.map((tool) => ({
+          id: `tool-desc-${tool.name}`,
+          content: {
+            full: `Tool: ${tool.name}\nDescription: ${tool.description}`,
+            summary: `${tool.name}: ${tool.description.slice(0, 50)}...`,
+          },
+          metadata: {
+            type: "tool_description",
+            loading: "preloaded" as const,
+            priority: 50,
+            role: "system" as const,
+            createdAt: Date.now(),
+          },
+        }));
+
+        // Available entities for the subagent
+        const subagentEntities = [systemPromptEntity, ...toolEntities];
+
+        // Load preloaded entities into subagent context
+        let initializedContext = await subagentHarness.load(
+          subagentContext,
+          null,
+          subagentEntities
+        );
+
+        if (debug) {
+          console.log(`[Subagent] Context initialized, running agent loop`);
+        }
+
+        // Run the agent loop (reusing the same loop as the main agent!)
+        const result = await runAgentLoop({
+          context: initializedContext,
+          world,
+          harness: subagentHarness,
           tools: availableTools,
+          availableEntities: subagentEntities,
+          llmConfig: {}, // Use default model
+          userInput: task,
+          maxTurns: max_turns, // Enforce turn limit
           debug,
         });
 
-        // Initialize the subagent
-        await subagent.initialize();
-
         if (debug) {
-          console.log(`[Subagent] Initialized with maxTokens: ${subagentMaxTokens}`);
-        }
-
-        // Run the subagent with turn limit
-        let turnCount = 0;
-        let lastResponse = "";
-
-        // We'll run a simple loop: send the task once
-        // The agent.chat() already handles the full loop until response
-        const result = await subagent.chat(task);
-        lastResponse = result.response;
-        turnCount = result.toolCalls.length + 1; // Approximate turn count
-
-        if (debug) {
-          console.log(`[Subagent] Completed in ${turnCount} turns`);
+          console.log(`[Subagent] Completed`);
           console.log(`[Subagent] Tool calls: ${result.toolCalls.length}`);
         }
 
@@ -134,13 +164,13 @@ export function createSubagentTool(options: SubagentToolOptions): AnyTool {
             ? `\n\nTools used: ${result.toolCalls.map((tc) => tc.tool).join(", ")}`
             : "";
 
-        const finalResult = `Subagent completed task.\n\nResponse:\n${lastResponse}${toolCallsSummary}`;
+        const finalResult = `Subagent completed task.\n\nResponse:\n${result.response}${toolCallsSummary}`;
 
         currentDepth--;
 
         return {
           result: finalResult,
-          world,
+          world: result.world, // Return updated world from subagent
           success: true,
         };
       } catch (error) {

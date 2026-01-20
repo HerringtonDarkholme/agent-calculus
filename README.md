@@ -253,6 +253,7 @@ Subagents allow an agent to spawn independent sub-agents to handle specific task
 - **Parallel processing**: Multiple subagents can work on different aspects
 - **Isolation**: Each subagent has its own context and focus
 - **Recursion control**: Configurable depth limits prevent infinite recursion
+- **Code reuse**: Subagents use the same `runAgentLoop` as the main agent
 
 ### Creating a Subagent Tool
 
@@ -303,7 +304,10 @@ await agent.chat(
 - **Context reduction**: Subagents get 50% of parent's maxTokens
 - **Recursion protection**: Maximum depth limit prevents infinite loops
 - **Tool inheritance**: Subagents have access to the same tools
-- **Turn limiting**: Prevents runaway subagent execution
+- **Turn limiting**: `max_turns` parameter enforces iteration limit (default: 10)
+  - Prevents runaway subagent execution
+  - Graceful stopping with informative message when limit is reached
+  - Each turn = one LLM call
 - **Error handling**: Graceful failure with informative error messages
 
 ## Advanced: Custom Harness
@@ -328,6 +332,32 @@ The agent loop implements: `Load → Reason → Execute → Repeat`
 2. **Reasoning Phase**: LLM generates (text, tool_calls)
 3. **Execution Phase**: Execute tools, results become new entities
 4. Repeat until LLM responds without tool calls
+
+### Reusable Agent Loop
+
+The core agent loop is implemented as a pure function `runAgentLoop()` that can be reused:
+
+```typescript
+import { runAgentLoop } from "agent-calculus";
+
+// Both Agent.chat() and spawn_subagent use this same function
+const result = await runAgentLoop({
+  context,
+  world,
+  harness,
+  tools,
+  availableEntities,
+  llmConfig,
+  userInput,
+  debug,
+});
+```
+
+This design ensures:
+- **DRY principle**: Single implementation of the agent loop
+- **Consistency**: Main agents and subagents behave identically
+- **Extensibility**: Easy to create custom agent patterns
+- **Turn limiting**: Optional `maxTurns` parameter prevents infinite loops
 
 ## CLI
 
