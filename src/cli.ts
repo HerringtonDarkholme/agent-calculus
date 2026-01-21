@@ -16,6 +16,8 @@ import {
 import {
   createSlashCommandRegistry,
   createBuiltInCommands,
+  createSlashCommandEntities,
+  createSlashCommandTool,
   type SlashCommand,
 } from "./patterns/slash-commands.js";
 
@@ -211,6 +213,9 @@ async function main() {
   // Create skill tools
   const skillTools = createSkillTools(skillRegistry);
 
+  // Create slash command tool
+  const slashCommandTool = createSlashCommandTool(slashCommandRegistry);
+
   // Create subagent tool
   const subagentTool = createSubagentTool({
     defaultSystemPrompt:
@@ -221,21 +226,26 @@ async function main() {
     debug: process.env.DEBUG === "true",
   });
 
-  // Combine all tools
-  const allTools = [...fileTools, ...skillTools, subagentTool];
+  // Combine all tools (including slash command tool)
+  const allTools = [...fileTools, ...skillTools, slashCommandTool, subagentTool];
   console.log(`Tools: ${allTools.map((t) => t.name).join(", ")}`);
+
+  // Create slash command entities (to be added to available entities pool)
+  const slashCommandEntities = createSlashCommandEntities(slashCommandRegistry);
+  console.log(`Slash command entities: ${slashCommandEntities.length}`);
 
   console.log();
   console.log('Commands: "exit", "quit", "reset", "context", or any slash command');
   console.log("=".repeat(60));
   console.log();
 
-  // Create agent with all tools
+  // Create agent with all tools and slash command entities
   const agent = await createAgent({
     systemPrompt: SYSTEM_PROMPT,
     workingDirectory,
     maxTokens: 128000,
     tools: allTools,
+    additionalEntities: slashCommandEntities,
     debug: process.env.DEBUG === "true",
   });
 
@@ -245,74 +255,42 @@ async function main() {
     output: process.stdout,
   });
 
-  // Helper to handle user input (slash commands or agent input)
+  // Helper to handle user input
+  // All input (including slash commands) is passed to the agent as user input
+  // The load function will detect slash commands and load the appropriate entities
   async function handleUserInput(input: string): Promise<void> {
-    // Check if input is a slash command
-    const parsed = slashCommandRegistry.parse(input);
+    try {
+      console.log("\nThinking...\n");
 
-    if (parsed) {
-      // It's a slash command - execute it and create entity from result
-      try {
-        const result = await slashCommandRegistry.execute(
-          input,
-          agent.getWorld()
-        );
+      // Create user input entity
+      const userEntity = createEntity({
+        content: input,
+        type: "user_input",
+        loading: "dynamic",
+        summary: input.slice(0, 50),
+        role: "user",
+      });
 
-        // Create entity from command result
-        const commandEntity = createEntity({
-          content: result.message,
-          type: "slash_command_result",
-          loading: "dynamic",
-          summary: `/${parsed.command}`,
-          role: "assistant",
-        });
+      // Pass entity to agent
+      // If it's a slash command, the load function will detect it and load the slash command entity
+      // The LLM will then see the command and can call execute_slash_command tool
+      const result = await agent.chat([userEntity]);
 
-        // Pass entity to agent (load function will filter and add to context)
-        await agent.chat([commandEntity]);
-
-        // Show result
-        console.log(result.message);
-        console.log();
-      } catch (error) {
-        console.error(
-          "Error executing command:",
-          error instanceof Error ? error.message : error
-        );
-        console.log();
-      }
-    } else {
-      // Normal input - create user input entity and pass to agent
-      try {
-        console.log("\nThinking...\n");
-
-        // Create user input entity
-        const userEntity = createEntity({
-          content: input,
-          type: "user_input",
-          loading: "dynamic",
-          summary: input.slice(0, 50),
-          role: "user",
-        });
-
-        // Pass entity to agent
-        const result = await agent.chat([userEntity]);
-
-        // Show tool calls if any
-        if (result.toolCalls.length > 0) {
-          console.log("Tools used:");
-          for (const tc of result.toolCalls) {
-            console.log(`  - ${tc.tool}(${JSON.stringify(tc.args)})`);
-          }
-          console.log();
+      // Show tool calls if any
+      if (result.toolCalls.length > 0) {
+        console.log("Tools used:");
+        for (const tc of result.toolCalls) {
+          console.log(`  - ${tc.tool}(${JSON.stringify(tc.args)})`);
         }
-
-        // Show response
-        console.log("Assistant:", result.response);
-        console.log();
-      } catch (error) {
-        console.error("Error:", error instanceof Error ? error.message : error);
         console.log();
       }
+
+      // Show response
+      console.log("Assistant:", result.response);
+      console.log();
+    } catch (error) {
+      console.error("Error:", error instanceof Error ? error.message : error);
+      console.log();
     }
   }
 

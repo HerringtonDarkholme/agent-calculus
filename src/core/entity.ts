@@ -37,6 +37,10 @@ export interface CreateEntityOptions {
   role?: "user" | "assistant" | "system";
   /** Custom ID (optional, will generate UUID if not provided) */
   id?: string;
+  /** Additional custom metadata */
+  metadata?: Record<string, unknown>;
+  /** Function to recommend verbosity based on context */
+  recommendVerbosity?: (ctx: import("./types.js").Context) => Verbosity | null | Promise<Verbosity | null>;
 }
 
 /**
@@ -52,6 +56,8 @@ export function createEntity(options: CreateEntityOptions): Entity {
     priority = 0,
     role,
     id = randomUUID(),
+    metadata: customMetadata = {},
+    recommendVerbosity,
   } = options;
 
   // Determine role based on type if not provided
@@ -81,12 +87,14 @@ export function createEntity(options: CreateEntityOptions): Entity {
     priority,
     role: entityRole,
     createdAt: Date.now(),
+    ...customMetadata,
   };
 
   return {
     id,
     content: entityContent,
     metadata,
+    recommendVerbosity,
   };
 }
 

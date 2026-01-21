@@ -287,6 +287,54 @@ But here's the thing—this isn't just blindly stuffing things into context! The
 
 This is where all the cleverness happens. The load function is like a skilled editor, deciding what goes in, what stays out, and how much detail to include.
 
+### 5.1.1 Entity Self-Recommendation
+
+Now here's an elegant optimization: **entities can recommend their own loading behavior**!
+
+Each entity can optionally provide a `recommendVerbosity` function:
+
+```python
+class Entity:
+    # ... other fields ...
+
+    # Optional: Entity recommends how it should be loaded
+    recommendVerbosity: Optional[(Context) → Verbosity | None]
+```
+
+**How it works:**
+1. The load function iterates through available entities
+2. For each entity, it calls `entity.recommendVerbosity(ctx)`
+3. The entity examines the context and returns:
+   - A verbosity level (`full`, `summary`, `digest`) if it should be loaded
+   - `None` if it should not be loaded at all
+4. The load function respects these recommendations (though it may override based on context constraints)
+
+**Why this is brilliant:**
+- **Separation of concerns**: Each entity encapsulates its own loading logic
+- **Extensibility**: New entity types can define custom loading behavior without modifying the harness
+- **Context-aware**: Entities can examine the full context to make informed decisions
+- **Composability**: Loading logic travels with the entity, making patterns reusable
+
+**Example - Slash Command Entity:**
+```python
+def create_slash_command_entity(command_name: str, workflow: str):
+    def recommend_verbosity(ctx: Context) -> Verbosity | None:
+        # Check if user input contains this slash command
+        last_user_msg = get_last_user_message(ctx)
+        if last_user_msg and last_user_msg.startswith(f"/{command_name}"):
+            return "full"  # Load the full workflow
+        return None  # Don't load if not triggered
+
+    return Entity(
+        content=workflow,
+        type="slash_command",
+        loading="dynamic",
+        recommendVerbosity=recommend_verbosity
+    )
+```
+
+The harness simply asks each entity: "Should you be loaded?" The entity decides based on the context!
+
 ### 5.2 Execute Function
 
 Now for the second function:
@@ -380,11 +428,15 @@ Look at this carefully:
 def agent_loop(user_input, world):
     ctx = Context()
     entity = Entity(content=user_input, type="user_input")
-    entities = discover_available_entities(world)  # tools, skills, memory, etc.
+
+    # Discover ALL available entities: tools, skills, memory, slash commands, rules, etc.
+    # This is the complete pool of entities that load() can choose from
+    entities = discover_available_entities(world)
 
     while not should_stop(ctx):
         # LOAD PHASE
-        # Pack relevant entities into context
+        # The load function decides which entities from the available pool to pack into context
+        # For example, if user_input starts with "/commit", load() will include the /commit entity
         ctx = harness.load(ctx, entity, entities)
 
         # REASONING PHASE
@@ -573,94 +625,151 @@ You know, I find slash commands particularly elegant—they're a beautiful examp
 
 **Implementation**:
 ```python
-# Slash commands as dynamic skill entities
-slash_commands = {
-    "/commit": Entity(
-        type="skill",
-        content="""
-        # Git Commit Workflow
-        1. Run git status to see all changes
-        2. Run git diff to review modifications
-        3. Analyze changes and draft commit message following repo style
-        4. Ask user for approval if changes are significant
-        5. Execute git add and git commit
-        6. Run git log to verify
+# Slash commands as entities with self-contained loading logic
+def create_slash_command_entity(name: str, description: str, workflow: str):
+    """
+    Create a slash command entity.
+    The entity encapsulates its own loading logic via recommendVerbosity.
+    """
+    trigger = f"/{name}"
+
+    def recommend_verbosity(ctx: Context) -> Verbosity | None:
+        """
+        This entity recommends itself for loading when user input starts with its trigger.
+        This is where the slash command detection logic lives!
+        """
+        # Find the most recent user message
+        last_user_msg = get_last_user_message(ctx)
+
+        if not last_user_msg:
+            return None  # No user input yet
+
+        # Check if user input starts with this command's trigger
+        if last_user_msg.strip().startswith(trigger):
+            return "full"  # Load the full workflow
+
+        # Don't load if not triggered
+        return None
+
+    return Entity(
+        type="slash_command",
+        content=f"""
+        # Slash Command: {trigger}
+
+        {description}
+
+        Workflow:
+        {workflow}
+
+        This command has been invoked by the user.
         """,
-        loading="dynamic",  # Loaded only when user types "/commit"
-        trigger="user_command"
-    ),
+        metadata={
+            "trigger": trigger,
+            "commandName": name,
+            "loading": "dynamic"
+        },
+        recommendVerbosity=recommend_verbosity  # Entity decides when to load!
+    )
 
-    "/review-pr": Entity(
-        type="skill",
-        content="""
-        # Pull Request Review Workflow
-        1. Fetch PR details using GitHub API or gh CLI
-        2. Analyze code changes for:
-           - Logic errors and bugs
-           - Security vulnerabilities
-           - Performance issues
-           - Style consistency
-        3. Check test coverage
-        4. Verify documentation updates
-        5. Provide structured feedback with severity levels
-        """,
-        loading="dynamic",
-        trigger="user_command"
-    ),
+# Create slash command entities
+def discover_slash_command_entities():
+    return [
+        create_slash_command_entity(
+            name="commit",
+            description="Create git commits following best practices",
+            workflow="""
+            1. Run git status to see all changes
+            2. Run git diff to review modifications
+            3. Analyze changes and draft commit message following repo style
+            4. Ask user for approval if changes are significant
+            5. Execute git add and git commit
+            6. Run git log to verify
+            """
+        ),
 
-    "/explain": Entity(
-        type="skill",
-        content="""
-        # Code Explanation Workflow
-        1. Read the target file or function
-        2. Analyze:
-           - Purpose and functionality
-           - Input/output behavior
-           - Dependencies and side effects
-           - Edge cases and error handling
-        3. Generate explanation using analogies and examples
-        4. Offer to explain specific parts in more detail
-        """,
-        loading="dynamic",
-        trigger="user_command"
-    ),
-}
+        create_slash_command_entity(
+            name="review-pr",
+            description="Conduct thorough pull request reviews",
+            workflow="""
+            1. Fetch PR details using GitHub API or gh CLI
+            2. Analyze code changes for:
+               - Logic errors and bugs
+               - Security vulnerabilities
+               - Performance issues
+               - Style consistency
+            3. Check test coverage
+            4. Verify documentation updates
+            5. Provide structured feedback with severity levels
+            """
+        ),
 
-# When user types "/commit", expand the command
-def handle_user_input(user_input, entities):
-    if user_input.startswith("/"):
-        command = user_input.split()[0]
-        args = user_input[len(command):].strip()
+        create_slash_command_entity(
+            name="explain",
+            description="Explain code with clarity and examples",
+            workflow="""
+            1. Read the target file or function
+            2. Analyze:
+               - Purpose and functionality
+               - Input/output behavior
+               - Dependencies and side effects
+               - Edge cases and error handling
+            3. Generate explanation using analogies and examples
+            4. Offer to explain specific parts in more detail
+            """
+        ),
+    ]
 
-        if command in slash_commands:
-            # Load the skill entity associated with this command
-            skill = slash_commands[command]
+# The load function simply asks each entity for recommendations
+def load(ctx, new_entities, available_entities):
+    """
+    The load function asks each entity: "Should you be loaded?"
+    No slash command detection logic here - entities decide for themselves!
+    """
+    entities_to_load = []
 
-            # Create enhanced user input entity
-            enhanced_input = Entity(
-                type="user_input",
-                content=f"Execute this workflow: {skill.content}\nUser args: {args}",
-                metadata={"original_command": command}
-            )
+    # Load preloaded entities (system prompt, memory, etc.)
+    entities_to_load.extend([e for e in available_entities
+                            if e.metadata.loading == "preloaded"])
 
-            return enhanced_input, [skill] + entities
+    # Add new entities (user input, tool results, etc.)
+    entities_to_load.extend(new_entities)
 
-    return Entity(user_input), entities
+    # Ask each dynamic entity if it should be loaded
+    for entity in available_entities:
+        if entity.metadata.loading == "dynamic":
+            if entity.recommendVerbosity:
+                # Entity decides based on context!
+                verbosity = entity.recommendVerbosity(ctx)
+                if verbosity is not None:
+                    entities_to_load.append((entity, verbosity))
+
+    # Pack entities into context
+    return pack_into_context(ctx, entities_to_load)
 ```
 
 **Example Usage Flow**:
 ```
 User: "/commit"
 
+# Agent loop initialization
+def agent_loop(user_input, world):
+    ctx = Context()
+    entity = Entity(content="/commit", type="user_input")
+
+    # Discover ALL available entities (including slash commands)
+    available_entities = discover_available_entities(world)
+    # Returns: [system_prompt, memory, rules, tools..., /commit, /review-pr, /explain]
+
 Agent Loop Turn 1:
   Load Phase:
-    - Detect slash command "/commit"
-    - Load full GitCommitSkill entity
-    - Expand user input: "Execute git commit workflow"
-    ctx = [system_prompt, rules, GitCommitSkill, file_tools, git_tools, user_input]
+    # load() function detects slash command in user input
+    # Loads ONLY the /commit entity from available_entities
+    ctx = harness.load(ctx, entity, available_entities)
+    # Result: ctx = [system_prompt, rules, /commit entity, git_tools, file_tools, user_input]
 
   LLM Phase:
-    reasoning: "Need to check current git status first"
+    # LLM sees the workflow from /commit entity in context
+    reasoning: "Need to check current git status first per the workflow"
     action: git_status()
 
   Execute Phase:
@@ -668,7 +777,9 @@ Agent Loop Turn 1:
 
 Turn 2:
   Load Phase:
-    ctx = [system_prompt, rules, GitCommitSkill, git_status_result, diff_tools]
+    # load() function includes workflow context and new tool result
+    ctx = harness.load(ctx, entity, available_entities)
+    # Result: ctx = [system_prompt, rules, /commit entity, git_status_result, diff_tools]
 
   LLM Phase:
     reasoning: "Should review the actual changes"
@@ -677,10 +788,14 @@ Turn 2:
   ... workflow continues ...
 ```
 
-**Key Insight**: Slash commands are **user-triggered skill entities**. They provide:
-1. **Discoverability**: Users can easily invoke complex workflows with simple commands
-2. **Consistency**: Same workflow logic every time
-3. **Efficiency**: No need to type long instructions repeatedly
+**Key Insight**: Slash commands are **entities that encapsulate their own loading logic**. They provide:
+1. **Self-Contained Logic**: Each slash command entity has a `recommendVerbosity` function that checks if it should be loaded
+2. **Separation of Concerns**: The harness doesn't know about slash commands—it just asks each entity "should you load?"
+3. **Extensibility**: New command types can be added without modifying the harness
+4. **Context-Aware**: Entities examine the full context to make informed loading decisions
+5. **Discoverability**: Users can easily invoke complex workflows with simple commands
+6. **Consistency**: Same workflow logic every time
+7. **No Preprocessing**: Slash commands are handled entirely within the standard load/execute loop
 
 **Design Variations**:
 
@@ -688,59 +803,92 @@ Turn 2:
 ```python
 User: "/explain src/auth.ts --detail high"
 
-# Parse into:
-command = "/explain"
-args = {"file": "src/auth.ts", "detail": "high"}
+# In the load function:
+def load(ctx, entity, available_entities):
+    if entity.type == "user_input" and entity.content.startswith("/"):
+        # Parse command and arguments
+        parts = entity.content.split()
+        command_name = parts[0]  # "/explain"
+        args = " ".join(parts[1:])  # "src/auth.ts --detail high"
 
-# Load skill with args injected into content
-skill.content = f"""
-Explain the code in {args['file']} with {args['detail']} level of detail.
-[... workflow steps ...]
-"""
+        # Find and load the matching slash command entity
+        for e in available_entities:
+            if e.type == "slash_command" and e.metadata.get("trigger") == command_name:
+                # Inject args into entity metadata for LLM to see
+                e_with_args = e.copy()
+                e_with_args.metadata["user_args"] = args
+                entities_to_load.append(e_with_args)
+                break
+
+    # LLM sees: "/explain workflow" + "user_args: src/auth.ts --detail high"
+    return pack_into_context(ctx, entity, entities_to_load)
 ```
 
 **Variation 2: Slash Command as Tool**
 ```python
-# Instead of expanding to skills, slash commands could be tools
-SlashCommandTool = Tool(
-    name="execute_slash_command",
-    description="Execute predefined workflows like /commit, /review-pr, /explain",
-    execute=lambda command, args, world: {
-        workflow = get_workflow(command)
+# Alternative: Slash commands could be implemented as tools that LLM explicitly invokes
+# This allows programmatic invocation rather than only user-triggered
+
+SlashCommandTool = Entity(
+    type="tool",
+    name="execute_workflow",
+    content="""
+    execute_workflow(workflow_name: str, args: str) -> result
+    Execute predefined workflows like 'commit', 'review-pr', 'explain'
+    """,
+    execute_handler=lambda workflow_name, args, world: {
+        workflow = get_workflow(workflow_name)
         result = execute_workflow(workflow, args, world)
         return Entity(type="workflow_result", content=result), world
     }
 )
 
-# LLM can invoke slash commands programmatically
-action = execute_slash_command("/commit")
+# LLM can invoke slash command workflows programmatically
+action = execute_workflow("commit", args="")
 ```
 
 **Variation 3: Hierarchical Slash Commands**
 ```python
-slash_commands = {
-    "/git": {
-        "/git commit": GitCommitSkill,
-        "/git pr": PRCreationSkill,
-        "/git sync": GitSyncSkill,
-    },
-    "/test": {
-        "/test run": TestRunnerSkill,
-        "/test debug": TestDebuggerSkill,
-        "/test coverage": CoverageSkill,
-    }
-}
+# Hierarchical slash commands as entities
+def discover_slash_command_entities():
+    return [
+        Entity(type="slash_command", name="/git commit",
+               metadata={"trigger": "/git commit"}, content="..."),
+        Entity(type="slash_command", name="/git pr",
+               metadata={"trigger": "/git pr"}, content="..."),
+        Entity(type="slash_command", name="/git sync",
+               metadata={"trigger": "/git sync"}, content="..."),
+        Entity(type="slash_command", name="/test run",
+               metadata={"trigger": "/test run"}, content="..."),
+        Entity(type="slash_command", name="/test debug",
+               metadata={"trigger": "/test debug"}, content="..."),
+        Entity(type="slash_command", name="/test coverage",
+               metadata={"trigger": "/test coverage"}, content="..."),
+    ]
+
+# The load function matches hierarchical commands
+def load(ctx, entity, available_entities):
+    if entity.type == "user_input" and entity.content.startswith("/"):
+        # Try to match full command (e.g., "/git commit")
+        for e in available_entities:
+            if e.type == "slash_command":
+                trigger = e.metadata.get("trigger")
+                if entity.content.startswith(trigger):
+                    entities_to_load.append(e)
+                    break
+    # ...
 ```
 
 **Comparison to Skills**:
 | | Skills | Slash Commands |
 |---|--------|----------------|
-| **Trigger** | Semantic relevance | Explicit user invocation |
-| **Discovery** | Automatic (by harness) | Manual (user must know command) |
-| **Loading** | Dynamic based on context | Dynamic on command |
+| **Trigger** | Semantic relevance detected by load() | Explicit slash prefix in user input detected by load() |
+| **Discovery** | load() searches for semantically relevant entities | load() searches for exact trigger match in user input |
+| **Loading** | Dynamic based on semantic context analysis | Dynamic based on exact pattern matching |
 | **Purpose** | Implicit workflow activation | Explicit workflow activation |
+| **Detection** | Requires semantic understanding | Simple string prefix matching |
 
-Think of skills as "the agent discovers what to do" and slash commands as "the user tells the agent what to do." Both are entities, both are workflows, but the invocation mechanism differs.
+Think of skills as "the load function discovers what to load based on semantics" and slash commands as "the load function discovers what to load based on explicit user syntax." Both are entities in the available entities pool, both are conditionally loaded by the harness.load() function, but the loading criteria differs.
 
 ### 7.5 Pattern: Subagent Spawning
 

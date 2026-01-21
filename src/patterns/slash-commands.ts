@@ -1,5 +1,6 @@
-import type { World, Entity } from "../core/types.js";
+import type { World, Entity, Tool } from "../core/types.js";
 import { createEntity } from "../core/entity.js";
+import { z } from "zod";
 
 // =============================================================================
 // Slash Command Types
@@ -205,26 +206,128 @@ export function createSlashCommandEntity(
 }
 
 /**
- * Check if user input is a slash command and execute it.
- * Returns the command result entity if it was a slash command, null otherwise.
+ * Convert a slash command to an entity.
+ * This entity will be added to the available entities pool.
+ * The entity's recommendVerbosity function decides when to load based on user input.
  */
-export async function interceptSlashCommand(
-  input: string,
-  world: World,
-  registry: SlashCommandRegistry
-): Promise<{ entity: Entity; result: SlashCommandResult } | null> {
-  const parsed = registry.parse(input);
-  if (!parsed) {
-    return null;
+export function createSlashCommandWorkflowEntity(
+  command: SlashCommand
+): Entity {
+  const trigger = `/${command.name}`;
+
+  // Build the workflow content with the command description and usage
+  let workflowContent = `# Slash Command: ${trigger}\n\n`;
+  workflowContent += `${command.description}\n\n`;
+
+  if (command.usage) {
+    workflowContent += `Usage: ${command.usage}\n\n`;
   }
 
-  // Execute the command
-  const result = await registry.execute(input, world);
+  // Note: The actual execution happens via the slash command execute function
+  // This entity provides the LLM with awareness that the command was invoked
+  workflowContent += `This command has been invoked by the user.`;
 
-  // Create entity from result
-  const entity = createSlashCommandEntity(parsed.command, result);
+  return createEntity({
+    content: workflowContent,
+    type: "slash_command",
+    loading: "dynamic",
+    summary: `${trigger}: ${command.description}`,
+    role: undefined, // Slash commands don't directly add messages
+    metadata: {
+      // Store metadata for reference
+      trigger,
+      commandName: command.name,
+    } as any,
+    // The entity recommends itself for loading when user input starts with the trigger
+    recommendVerbosity: async (ctx) => {
+      // Find the most recent user input in the context
+      const lastUserMessage = ctx.messages
+        .slice()
+        .reverse()
+        .find((msg) => msg.role === "user");
 
-  return { entity, result };
+      if (!lastUserMessage) {
+        return null; // No user input yet
+      }
+
+      const userInput = typeof lastUserMessage.content === "string"
+        ? lastUserMessage.content
+        : "";
+
+      // Check if user input starts with this command's trigger
+      if (userInput.trim().startsWith(trigger)) {
+        // Load at full verbosity when triggered
+        return "full";
+      }
+
+      // Don't load if not triggered
+      return null;
+    },
+  });
+}
+
+/**
+ * Create entities for all slash commands in a registry.
+ * These entities should be added to the available entities pool.
+ */
+export function createSlashCommandEntities(
+  registry: SlashCommandRegistry
+): Entity[] {
+  return registry.getAll().map((cmd) => createSlashCommandWorkflowEntity(cmd));
+}
+
+// =============================================================================
+// Slash Command Tool
+// =============================================================================
+
+/**
+ * Create a tool that allows the LLM to execute slash commands.
+ * This is used when a slash command entity is loaded into context.
+ */
+export function createSlashCommandTool(
+  registry: SlashCommandRegistry
+): Tool<{ command: string; args?: string[] }, string> {
+  const schema = z.object({
+    command: z.string().describe("The slash command name (without /)"),
+    args: z.array(z.string()).optional().describe("Command arguments"),
+  });
+
+  return {
+    name: "execute_slash_command",
+    description: "Execute a slash command that the user has invoked",
+    parameters: schema,
+    async execute(params, world) {
+      const { command, args = [] } = params;
+
+      const slashCommand = registry.get(command);
+      if (!slashCommand) {
+        return {
+          result: `Error: Unknown command: /${command}`,
+          world,
+          success: false,
+          error: "Command not found",
+        };
+      }
+
+      try {
+        const result = await slashCommand.execute(args, world);
+
+        return {
+          result: result.message,
+          world: result.world ?? world,
+          success: result.success,
+          error: result.error,
+        };
+      } catch (error) {
+        return {
+          result: `Error executing /${command}: ${error instanceof Error ? error.message : String(error)}`,
+          world,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  };
 }
 
 // =============================================================================

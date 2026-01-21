@@ -143,5 +143,6 @@ export {
   createListCommand,
   createBuiltInCommands,
   createSlashCommandEntity,
-  interceptSlashCommand,
+  createSlashCommandEntities,
+  createSlashCommandTool,
 } from "./patterns/slash-commands.js";

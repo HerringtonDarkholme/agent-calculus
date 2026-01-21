@@ -132,8 +132,51 @@ export function createHarness(config?: HarnessConfig): Harness {
         }
       }
 
-      // Step 4: Load dynamically discovered entities based on relevance
-      // (For now, we skip this - will be implemented in skills pattern)
+      // Step 4: Load dynamically discovered entities based on their recommendations
+      for (const entity of availableEntities) {
+        // Skip if entity is already loaded
+        const alreadyLoaded = updatedCtx.entities.some(
+          (e) => e.entity.id === entity.id
+        );
+        if (alreadyLoaded) {
+          continue;
+        }
+
+        // Skip preloaded entities (already handled in Step 2)
+        if (entity.metadata.loading === "preloaded") {
+          continue;
+        }
+
+        // Check if entity has a recommendation function
+        if (entity.recommendVerbosity) {
+          log(`  Asking entity ${entity.metadata.type} (${entity.id.slice(0, 8)}) for recommendation`);
+
+          // Call the entity's recommendation function
+          const recommendedVerbosity = await entity.recommendVerbosity(updatedCtx);
+
+          if (recommendedVerbosity !== null) {
+            log(`  Entity recommends: ${recommendedVerbosity}`);
+
+            // Load the entity at the recommended verbosity
+            updatedCtx = await appendEntity(updatedCtx, entity, recommendedVerbosity);
+
+            // If entity has a role, also add to messages
+            if (entity.metadata.role) {
+              const content = await getEntityContent(entity, recommendedVerbosity);
+              updatedCtx = {
+                ...updatedCtx,
+                messages: [
+                  ...updatedCtx.messages,
+                  { role: entity.metadata.role, content },
+                ],
+              };
+              log(`  Added message: ${entity.metadata.role} - ${content.slice(0, 50)}...`);
+            }
+          } else {
+            log(`  Entity recommends: not loading`);
+          }
+        }
+      }
 
       log(`  Final utilization: ${(getUtilization(updatedCtx) * 100).toFixed(1)}%`);
       return updatedCtx;
@@ -150,7 +193,7 @@ export function createHarness(config?: HarnessConfig): Harness {
     async execute(
       action: ToolCallAction,
       world: World,
-      tools: Tool[]
+      tools: import("./types.js").AnyTool[]
     ): Promise<{ entity: Entity; world: World }> {
       log(`Executing tool: ${action.name}`);
 

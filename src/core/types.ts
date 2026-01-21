@@ -79,6 +79,8 @@ export interface EntityMetadata {
   createdAt?: number;
   /** Role for message conversion (user, assistant, system) */
   role?: "user" | "assistant" | "system";
+  /** Additional metadata (extensible for custom types like slash commands) */
+  [key: string]: unknown;
 }
 
 /**
@@ -111,6 +113,14 @@ export interface Entity {
   content: EntityContent | (() => EntityContent) | (() => Promise<EntityContent>);
   /** Entity metadata */
   metadata: EntityMetadata;
+  /**
+   * Recommend verbosity for loading this entity.
+   * The harness calls this function to decide if and how to load the entity.
+   *
+   * @param ctx - Current context
+   * @returns Recommended verbosity level, or null if entity should not be loaded
+   */
+  recommendVerbosity?: (ctx: Context) => Verbosity | null | Promise<Verbosity | null>;
 }
 
 // =============================================================================
@@ -276,7 +286,7 @@ export interface Harness {
   execute(
     action: ToolCallAction,
     world: World,
-    tools: Tool[]
+    tools: AnyTool[]
   ): Promise<{ entity: Entity; world: World }>;
 }
 
@@ -295,7 +305,7 @@ export interface AgentConfig {
   /** Maximum tokens for context */
   maxTokens: number;
   /** Available tools */
-  tools: Tool[];
+  tools: AnyTool[];
   /** Model to use */
   model?: string;
 }

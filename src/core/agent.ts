@@ -32,12 +32,12 @@ export class Agent {
   private ctx: Context;
   private world: World;
   private harness: Harness;
-  private tools: Tool[];
+  private tools: import("./types.js").AnyTool[];
   private availableEntities: Entity[];
   private llmConfig: LLMConfig;
   private debug: boolean;
 
-  constructor(config: AgentConfig & { debug?: boolean }) {
+  constructor(config: AgentConfig & { debug?: boolean; additionalEntities?: Entity[] }) {
     this.debug = config.debug ?? false;
     this.tools = config.tools;
     this.llmConfig = config.model ? { model: config.model } : {};
@@ -64,12 +64,17 @@ export class Agent {
       })
     );
 
-    // Store available entities
-    this.availableEntities = [systemPromptEntity, ...toolEntities];
+    // Store available entities (including additional entities like slash commands)
+    this.availableEntities = [
+      systemPromptEntity,
+      ...toolEntities,
+      ...(config.additionalEntities ?? []),
+    ];
 
     this.log("Agent initialized");
     this.log(`  Working directory: ${config.workingDirectory}`);
     this.log(`  Tools: ${this.tools.map((t) => t.name).join(", ")}`);
+    this.log(`  Available entities: ${this.availableEntities.length}`);
   }
 
   private log(...args: unknown[]): void {
@@ -157,7 +162,7 @@ export class Agent {
  * Create a new agent with the given configuration.
  */
 export async function createAgent(
-  config: AgentConfig & { debug?: boolean }
+  config: AgentConfig & { debug?: boolean; additionalEntities?: Entity[] }
 ): Promise<Agent> {
   const agent = new Agent(config);
   await agent.initialize();

@@ -23,7 +23,7 @@ export interface AgentLoopOptions {
   /** Harness for load/execute */
   harness: Harness;
   /** Available tools */
-  tools: Tool[];
+  tools: import("./types.js").AnyTool[];
   /** Available entities for loading */
   availableEntities: Entity[];
   /** LLM configuration */
