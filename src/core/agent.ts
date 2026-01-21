@@ -4,11 +4,10 @@ import type {
   Context,
   Entity,
   Harness,
-  Tool,
   World,
 } from "./types.js";
 import { BuiltInEntityTypes } from "./types.js";
-import { createContext, appendEntity } from "./context.js";
+import { createContext } from "./context.js";
 import { createHarness } from "./harness.js";
 import { createWorld } from "./world.js";
 import { createSystemPrompt, createEntity } from "./entity.js";

@@ -167,7 +167,7 @@ const clearCommand: SlashCommand = {
   name: "clear",
   description: "Clear the terminal screen",
   aliases: ["cls"],
-  async execute(args, world) {
+  async execute(_args, _world) {
     console.clear();
     return {
       message: "Screen cleared",

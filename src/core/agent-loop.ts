@@ -2,13 +2,12 @@ import type {
   Context,
   Entity,
   Harness,
-  Tool,
   ToolCallAction,
   World,
   ChatResult,
 } from "./types.js";
 import { invokeLLM, type LLMConfig } from "../llm/provider.js";
-import { createUserInput, getEntityContent } from "./entity.js";
+import { getEntityContent } from "./entity.js";
 import { appendEntity } from "./context.js";
 
 // =============================================================================

@@ -2,7 +2,6 @@ import type {
   Context,
   Entity,
   Harness,
-  Tool,
   ToolCallAction,
   Verbosity,
   World,
