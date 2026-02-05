@@ -6,6 +6,9 @@ import type {
   EntityType,
   LoadingStrategy,
   Verbosity,
+  MessageContentType,
+  ToolCallInfo,
+  ToolResultInfo,
 } from "./types.js";
 import { BuiltInEntityTypes } from "./types.js";
 
@@ -34,10 +37,10 @@ export interface CreateEntityOptions {
   /** Priority for loading (default: 0) */
   priority?: number;
   /** Role for message conversion */
-  role?: "user" | "assistant" | "system";
+  role?: "user" | "assistant" | "system" | "tool";
   /** Custom ID (optional, will generate UUID if not provided) */
   id?: string;
-  /** Additional custom metadata */
+  /** Additional custom metadata (can include contentType, toolCall, toolResult, messageGroupId) */
   metadata?: Record<string, unknown>;
   /** Function to recommend verbosity based on context */
   recommendVerbosity?: (ctx: import("./types.js").Context) => Verbosity | null | Promise<Verbosity | null>;
@@ -102,7 +105,7 @@ export function createEntity(options: CreateEntityOptions): Entity {
  * Get the message role for an entity type.
  * For unknown types, defaults to "user".
  */
-function getRoleForType(type: EntityType): "user" | "assistant" | "system" {
+function getRoleForType(type: EntityType): "user" | "assistant" | "system" | "tool" {
   switch (type) {
     case BuiltInEntityTypes.SYSTEM_PROMPT:
       return "system";
@@ -112,7 +115,7 @@ function getRoleForType(type: EntityType): "user" | "assistant" | "system" {
     case BuiltInEntityTypes.REASONING:
       return "assistant";
     case BuiltInEntityTypes.TOOL_RESULT:
-      return "user"; // Tool results are sent as tool messages, but entity role is user
+      return "tool";
     default:
       // Unknown types default to "user"
       return "user";
@@ -248,6 +251,14 @@ export function createToolResult(
     summary: options?.summary,
     digest: options?.digest,
     id: `tool-result-${toolCallId}`,
+    role: "tool",
+    metadata: {
+      contentType: "tool-result" as const,
+      toolResult: {
+        toolCallId,
+        toolName,
+      },
+    },
   });
 }
 
@@ -271,5 +282,88 @@ Parameters: ${JSON.stringify(parameters, null, 2)}`;
     loading: "preloaded",
     summary: summaryContent,
     priority: 50,
+  });
+}
+
+// =============================================================================
+// Message Entity Creators
+// =============================================================================
+
+/**
+ * Create an assistant text message entity.
+ * Can be grouped with tool calls using messageGroupId.
+ */
+export function createAssistantTextMessage(
+  content: string,
+  options?: { messageGroupId?: string }
+): Entity {
+  return createEntity({
+    content,
+    type: BuiltInEntityTypes.ASSISTANT_MESSAGE,
+    loading: "dynamic",
+    role: "assistant",
+    metadata: {
+      contentType: "text" as const,
+      messageGroupId: options?.messageGroupId,
+    },
+  });
+}
+
+/**
+ * Create an assistant tool call entity.
+ * Should be grouped with the assistant text message using the same messageGroupId.
+ */
+export function createAssistantToolCall(
+  toolCallId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  messageGroupId: string
+): Entity {
+  return createEntity({
+    content: `[Tool call: ${toolName}]`,
+    type: BuiltInEntityTypes.ASSISTANT_MESSAGE,
+    loading: "dynamic",
+    role: "assistant",
+    id: `tool-call-${toolCallId}`,
+    metadata: {
+      contentType: "tool-call" as const,
+      toolCall: {
+        toolCallId,
+        toolName,
+        args,
+      },
+      messageGroupId,
+    },
+  });
+}
+
+/**
+ * Create a user text message entity.
+ */
+export function createUserTextMessage(content: string): Entity {
+  return createEntity({
+    content,
+    type: BuiltInEntityTypes.USER_INPUT,
+    loading: "dynamic",
+    role: "user",
+    metadata: {
+      contentType: "text" as const,
+    },
+  });
+}
+
+/**
+ * Create a system message entity.
+ */
+export function createSystemMessage(content: string): Entity {
+  return createEntity({
+    content,
+    type: BuiltInEntityTypes.SYSTEM_PROMPT,
+    loading: "preloaded",
+    role: "system",
+    priority: 100,
+    metadata: {
+      contentType: "text" as const,
+    },
   });
 }

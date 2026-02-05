@@ -44,8 +44,8 @@ export async function invokeLLM(
 ): Promise<LLMResponse> {
   const { model, maxTokens, temperature } = { ...DEFAULT_CONFIG, ...config };
 
-  // Convert context to messages
-  const messages = contextToMessages(ctx);
+  // Convert context to messages (now async)
+  const messages = await contextToMessages(ctx);
 
   // Convert tools to Vercel AI SDK format
   const aiTools = toolsToAITools(tools);

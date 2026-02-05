@@ -66,6 +66,11 @@ export {
   getEntityContent,
   estimateTokens,
   estimateEntityTokens,
+  // Message-aware entity creators
+  createAssistantTextMessage,
+  createAssistantToolCall,
+  createUserTextMessage,
+  createSystemMessage,
 } from "./core/entity.js";
 
 // Context

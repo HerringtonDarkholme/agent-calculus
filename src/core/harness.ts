@@ -114,21 +114,9 @@ export function createHarness(config?: HarnessConfig): Harness {
           }
         }
 
-        // Add to entities
+        // Add to entities (messages will be derived via contextToMessages)
         updatedCtx = await appendEntity(updatedCtx, newEntity, verbosity);
-
-        // If entity has a role, also add to messages
-        if (newEntity.metadata.role) {
-          const content = await getEntityContent(newEntity, verbosity);
-          updatedCtx = {
-            ...updatedCtx,
-            messages: [
-              ...updatedCtx.messages,
-              { role: newEntity.metadata.role, content },
-            ],
-          };
-          log(`  Added message: ${newEntity.metadata.role} - ${content.slice(0, 50)}...`);
-        }
+        log(`  Added entity: ${newEntity.metadata.type}${newEntity.metadata.role ? ` (role: ${newEntity.metadata.role})` : ""}`);
       }
 
       // Step 4: Load dynamically discovered entities based on their recommendations
@@ -156,21 +144,9 @@ export function createHarness(config?: HarnessConfig): Harness {
           if (recommendedVerbosity !== null) {
             log(`  Entity recommends: ${recommendedVerbosity}`);
 
-            // Load the entity at the recommended verbosity
+            // Load the entity at the recommended verbosity (messages will be derived via contextToMessages)
             updatedCtx = await appendEntity(updatedCtx, entity, recommendedVerbosity);
-
-            // If entity has a role, also add to messages
-            if (entity.metadata.role) {
-              const content = await getEntityContent(entity, recommendedVerbosity);
-              updatedCtx = {
-                ...updatedCtx,
-                messages: [
-                  ...updatedCtx.messages,
-                  { role: entity.metadata.role, content },
-                ],
-              };
-              log(`  Added message: ${entity.metadata.role} - ${content.slice(0, 50)}...`);
-            }
+            log(`  Loaded entity: ${entity.metadata.type}${entity.metadata.role ? ` (role: ${entity.metadata.role})` : ""}`);
           } else {
             log(`  Entity recommends: not loading`);
           }

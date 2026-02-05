@@ -101,9 +101,22 @@ export class Agent {
    *   3. EXECUTE: Run tools in world
    *   4. If no tool call, return response
    *
-   * @param entities - Entities to process (e.g., user input, slash command results, etc.)
+   * @param input - Either a string (converted to user input entity) or entities to process
    */
-  async chat(entities: Entity[]): Promise<ChatResult> {
+  async chat(input: string | Entity[]): Promise<ChatResult> {
+    // Convert string to user input entity for backwards compatibility
+    const entities = typeof input === "string"
+      ? [createEntity({
+          content: input,
+          type: BuiltInEntityTypes.USER_INPUT,
+          loading: "dynamic",
+          role: "user",
+          metadata: {
+            contentType: "text" as const,
+          },
+        })]
+      : input;
+
     this.log(`\n--- New turn ---`);
     this.log(`Processing ${entities.length} entities`);
 

@@ -1,6 +1,6 @@
 import type { CoreMessage } from "ai";
 import type { Context, Entity, LoadedEntity, Verbosity } from "./types.js";
-import { estimateEntityTokens } from "./entity.js";
+import { estimateEntityTokens, getEntityContent } from "./entity.js";
 
 // =============================================================================
 // Context Implementation
@@ -12,7 +12,6 @@ import { estimateEntityTokens } from "./entity.js";
 export function createContext(maxTokens: number = 128000): Context {
   return {
     entities: [],
-    messages: [],
     maxTokens,
     currentTokens: 0,
   };
@@ -103,10 +102,146 @@ export async function updateVerbosity(
 
 /**
  * Convert context to messages for Vercel AI SDK.
- * Simply returns the message array that's been built up.
+ * Rebuilds messages from entities based on their message metadata.
  */
-export function contextToMessages(ctx: Context): CoreMessage[] {
-  return ctx.messages;
+export async function contextToMessages(ctx: Context): Promise<CoreMessage[]> {
+  const messages: CoreMessage[] = [];
+
+  // Filter entities that have message roles
+  const messageEntities = ctx.entities.filter((e) => e.entity.metadata.role);
+
+  // Group entities by messageGroupId or process individually
+  const processedGroups = new Set<string>();
+
+  for (let i = 0; i < messageEntities.length; i++) {
+    const loadedEntity = messageEntities[i];
+    const entity = loadedEntity.entity;
+    const meta = entity.metadata;
+
+    // Skip if already processed as part of a group
+    if (meta.messageGroupId && processedGroups.has(meta.messageGroupId)) {
+      continue;
+    }
+
+    // If entity has a group ID, collect all entities in the group
+    if (meta.messageGroupId) {
+      processedGroups.add(meta.messageGroupId);
+
+      const groupEntities = messageEntities.filter(
+        (e) => e.entity.metadata.messageGroupId === meta.messageGroupId
+      );
+
+      // Build multi-part message
+      const message = await buildMultiPartMessage(groupEntities, loadedEntity.verbosity);
+      if (message) {
+        messages.push(message);
+      }
+    } else {
+      // Single entity message
+      const message = await buildSingleMessage(loadedEntity);
+      if (message) {
+        messages.push(message);
+      }
+    }
+  }
+
+  return messages;
+}
+
+/**
+ * Build a single message from one entity.
+ */
+async function buildSingleMessage(
+  loadedEntity: LoadedEntity
+): Promise<CoreMessage | null> {
+  const entity = loadedEntity.entity;
+  const meta = entity.metadata;
+  const role = meta.role;
+
+  if (!role) {
+    return null;
+  }
+
+  const content = await getEntityContent(entity, loadedEntity.verbosity);
+
+  // Simple text message
+  if (!meta.contentType || meta.contentType === "text") {
+    return { role, content } as CoreMessage;
+  }
+
+  // Tool result message
+  if (meta.contentType === "tool-result" && meta.toolResult) {
+    return {
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: meta.toolResult.toolCallId,
+          toolName: meta.toolResult.toolName,
+          result: content,
+        },
+      ],
+    } as CoreMessage;
+  }
+
+  // Default to text
+  return { role, content } as CoreMessage;
+}
+
+/**
+ * Build a multi-part message from grouped entities.
+ */
+async function buildMultiPartMessage(
+  groupEntities: LoadedEntity[],
+  defaultVerbosity: import("./types.js").Verbosity
+): Promise<CoreMessage | null> {
+  if (groupEntities.length === 0) {
+    return null;
+  }
+
+  const firstEntity = groupEntities[0].entity;
+  const role = firstEntity.metadata.role;
+
+  if (!role) {
+    return null;
+  }
+
+  // Build content array
+  const contentParts: any[] = [];
+
+  for (const loadedEntity of groupEntities) {
+    const entity = loadedEntity.entity;
+    const meta = entity.metadata;
+    const content = await getEntityContent(entity, loadedEntity.verbosity);
+
+    if (meta.contentType === "text") {
+      contentParts.push({
+        type: "text",
+        text: content,
+      });
+    } else if (meta.contentType === "tool-call" && meta.toolCall) {
+      contentParts.push({
+        type: "tool-call",
+        toolCallId: meta.toolCall.toolCallId,
+        toolName: meta.toolCall.toolName,
+        args: meta.toolCall.args,
+      });
+    } else if (meta.contentType === "tool-result" && meta.toolResult) {
+      contentParts.push({
+        type: "tool-result",
+        toolCallId: meta.toolResult.toolCallId,
+        toolName: meta.toolResult.toolName,
+        result: content,
+      });
+    }
+  }
+
+  // If only one text part, return as simple string
+  if (contentParts.length === 1 && contentParts[0].type === "text") {
+    return { role, content: contentParts[0].text } as CoreMessage;
+  }
+
+  return { role, content: contentParts } as CoreMessage;
 }
 
 // =============================================================================

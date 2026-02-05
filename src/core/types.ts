@@ -64,6 +64,28 @@ export interface EntityDiscovery {
 }
 
 /**
+ * Message content type for LLM API messages.
+ */
+export type MessageContentType = "text" | "tool-call" | "tool-result";
+
+/**
+ * Tool call information for assistant messages.
+ */
+export interface ToolCallInfo {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * Tool result information for tool messages.
+ */
+export interface ToolResultInfo {
+  toolCallId: string;
+  toolName: string;
+}
+
+/**
  * Metadata describing how an entity should be managed.
  */
 export interface EntityMetadata {
@@ -77,8 +99,19 @@ export interface EntityMetadata {
   discovery?: EntityDiscovery;
   /** Creation timestamp */
   createdAt?: number;
-  /** Role for message conversion (user, assistant, system) */
-  role?: "user" | "assistant" | "system";
+
+  // Message-related metadata
+  /** Role for message conversion (user, assistant, system, tool) */
+  role?: "user" | "assistant" | "system" | "tool";
+  /** Content type within message (text, tool-call, tool-result) */
+  contentType?: MessageContentType;
+  /** Tool call information (for assistant messages with tool calls) */
+  toolCall?: ToolCallInfo;
+  /** Tool result information (for tool result messages) */
+  toolResult?: ToolResultInfo;
+  /** Group ID for multi-part messages (e.g., assistant text + tool calls) */
+  messageGroupId?: string;
+
   /** Additional metadata (extensible for custom types like slash commands) */
   [key: string]: unknown;
 }
@@ -139,12 +172,11 @@ export interface LoadedEntity {
 
 /**
  * Context: The observable, directly accessible information within the LLM's attention window.
+ * Messages for the LLM API are derived from entities via contextToMessages().
  */
 export interface Context {
   /** Entities currently in context */
   entities: LoadedEntity[];
-  /** Message history (for LLM API) */
-  messages: CoreMessage[];
   /** Maximum tokens allowed */
   maxTokens: number;
   /** Current token usage */

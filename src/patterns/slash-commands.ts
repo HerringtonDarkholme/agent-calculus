@@ -1,5 +1,6 @@
 import type { World, Entity, Tool } from "../core/types.js";
 import { createEntity } from "../core/entity.js";
+import { contextToMessages } from "../core/context.js";
 import { z } from "zod";
 
 // =============================================================================
@@ -241,7 +242,8 @@ export function createSlashCommandWorkflowEntity(
     // The entity recommends itself for loading when user input starts with the trigger
     recommendVerbosity: async (ctx) => {
       // Find the most recent user input in the context
-      const lastUserMessage = ctx.messages
+      const messages = await contextToMessages(ctx);
+      const lastUserMessage = messages
         .slice()
         .reverse()
         .find((msg) => msg.role === "user");

@@ -7,8 +7,13 @@ import type {
   ChatResult,
 } from "./types.js";
 import { invokeLLM, type LLMConfig } from "../llm/provider.js";
-import { getEntityContent } from "./entity.js";
+import {
+  getEntityContent,
+  createAssistantTextMessage,
+  createAssistantToolCall,
+} from "./entity.js";
 import { appendEntity } from "./context.js";
+import { randomUUID } from "crypto";
 
 // =============================================================================
 // Agent Loop
@@ -103,14 +108,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         `The agent reached the maximum number of allowed turns without completing the task. ` +
         `This may indicate the task is too complex or the turn limit is too low.`;
 
-      // Add a final assistant message indicating truncation
-      ctx = {
-        ...ctx,
-        messages: [
-          ...ctx.messages,
-          { role: "assistant", content: truncatedResponse },
-        ],
-      };
+      // Add a final assistant message entity indicating truncation
+      const truncationEntity = createAssistantTextMessage(truncatedResponse);
+      ctx = await appendEntity(ctx, truncationEntity);
 
       return {
         response: truncatedResponse,
@@ -134,14 +134,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     if (llmResponse.toolCalls.length === 0) {
       log("No tool calls, returning response");
 
-      // Add assistant message to context
-      ctx = {
-        ...ctx,
-        messages: [
-          ...ctx.messages,
-          { role: "assistant", content: llmResponse.text },
-        ],
-      };
+      // Add assistant message entity to context
+      const assistantEntity = createAssistantTextMessage(llmResponse.text);
+      ctx = await appendEntity(ctx, assistantEntity);
 
       return {
         response: llmResponse.text,
@@ -151,28 +146,26 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       };
     }
 
-    // LLM made tool calls - add assistant message with tool calls
-    ctx = {
-      ...ctx,
-      messages: [
-        ...ctx.messages,
-        {
-          role: "assistant",
-          content: [
-            { type: "text", text: llmResponse.text },
-            ...llmResponse.toolCalls.map((tc) => ({
-              type: "tool-call" as const,
-              toolCallId: tc.toolCallId,
-              toolName: tc.toolName,
-              args: tc.args,
-            })),
-          ],
-        },
-      ],
-    };
+    // LLM made tool calls - create entities for assistant message with tool calls
+    // Use a message group ID to group text and tool calls into one message
+    const messageGroupId = randomUUID();
+
+    // Add assistant text entity
+    const assistantTextEntity = createAssistantTextMessage(llmResponse.text, { messageGroupId });
+    ctx = await appendEntity(ctx, assistantTextEntity);
+
+    // Add tool call entities (all part of the same message group)
+    for (const toolCall of llmResponse.toolCalls) {
+      const toolCallEntity = createAssistantToolCall(
+        toolCall.toolCallId,
+        toolCall.toolName,
+        toolCall.args,
+        messageGroupId
+      );
+      ctx = await appendEntity(ctx, toolCallEntity);
+    }
 
     // EXECUTION PHASE - execute all tool calls
-    const toolResultParts = [];
     for (const toolCall of llmResponse.toolCalls) {
       log(`Executing tool: ${toolCall.toolName}`);
 
@@ -192,14 +185,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // Get the actual content (evaluates if dynamic)
       const resultContent = await getEntityContent(result.entity, "full");
 
-      // Collect tool result
-      toolResultParts.push({
-        type: "tool-result" as const,
-        toolCallId: toolCall.toolCallId,
-        toolName: toolCall.toolName,
-        result: resultContent,
-      });
-
       // Track the tool call
       toolCallsMade.push({
         tool: toolCall.toolName,
@@ -207,24 +192,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         result: resultContent,
       });
 
-      // Store result as entity (for memory/compression/context management)
-      // This is separate from messages - entities are inputs, messages are API format
+      // Store result as entity (which includes message metadata for conversion)
       ctx = await appendEntity(ctx, result.entity);
 
       log(`Tool result: ${resultContent.slice(0, 100)}...`);
     }
-
-    // Add tool results message
-    ctx = {
-      ...ctx,
-      messages: [
-        ...ctx.messages,
-        {
-          role: "tool",
-          content: toolResultParts,
-        },
-      ],
-    };
 
     // Continue loop to process tool results
   }
