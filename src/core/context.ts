@@ -132,7 +132,7 @@ export async function contextToMessages(ctx: Context): Promise<CoreMessage[]> {
       );
 
       // Build multi-part message
-      const message = await buildMultiPartMessage(groupEntities, loadedEntity.verbosity);
+      const message = await buildMultiPartMessage(groupEntities);
       if (message) {
         messages.push(message);
       }
@@ -192,8 +192,7 @@ async function buildSingleMessage(
  * Build a multi-part message from grouped entities.
  */
 async function buildMultiPartMessage(
-  groupEntities: LoadedEntity[],
-  defaultVerbosity: import("./types.js").Verbosity
+  groupEntities: LoadedEntity[]
 ): Promise<CoreMessage | null> {
   if (groupEntities.length === 0) {
     return null;

@@ -8,7 +8,7 @@ import type {
 } from "./types.js";
 import { BuiltInEntityTypes } from "./types.js";
 import { appendEntity, getUtilization, updateVerbosity } from "./context.js";
-import { createToolResult, getEntityContent } from "./entity.js";
+import { createToolResult } from "./entity.js";
 
 // =============================================================================
 // Harness Configuration

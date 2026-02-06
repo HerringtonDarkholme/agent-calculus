@@ -6,9 +6,6 @@ import type {
   EntityType,
   LoadingStrategy,
   Verbosity,
-  MessageContentType,
-  ToolCallInfo,
-  ToolResultInfo,
 } from "./types.js";
 import { BuiltInEntityTypes } from "./types.js";
 
